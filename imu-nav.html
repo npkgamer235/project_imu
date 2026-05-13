@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<title>IMU Nav</title>
+<style>
+  /* ── Reset & tokens ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg0: #0b0e14;
+    --bg1: #111620;
+    --bg2: #171d2e;
+    --bg3: #1e253a;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.12);
+    --text1: #e8edf8;
+    --text2: #8b96b0;
+    --text3: #4e5972;
+    --accent: #1fc98a;
+    --accent2: #17a872;
+    --blue: #4a9eff;
+    --amber: #f5a623;
+    --red: #ff5a5a;
+    --purple: #9b7fff;
+    --r: 8px;
+    --mono: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  }
+  html, body { height: 100%; background: var(--bg0); color: var(--text1); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; overflow: hidden; }
+
+  /* ── Layout ── */
+  #app { display: flex; flex-direction: column; height: 100%; }
+  #header { padding: 14px 16px 10px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--border); flex-shrink: 0; background: var(--bg1); }
+  #header .logo { width: 28px; height: 28px; background: var(--accent); border-radius: 6px; display: flex; align-items: center; justify-content: center; }
+  #header .logo svg { width: 16px; height: 16px; fill: var(--bg0); }
+  #header h1 { font-size: 15px; font-weight: 600; letter-spacing: 0.02em; color: var(--text1); }
+  #header .status { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text2); }
+  #header .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text3); transition: background 0.3s; }
+  #header .dot.live { background: var(--accent); box-shadow: 0 0 6px var(--accent); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+  /* ── Tabs ── */
+  #tabs { display: flex; background: var(--bg1); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .tab { flex: 1; padding: 10px 4px 9px; text-align: center; font-size: 11px; font-weight: 500; color: var(--text3); cursor: pointer; transition: color 0.2s; border-bottom: 2px solid transparent; letter-spacing: 0.04em; text-transform: uppercase; -webkit-tap-highlight-color: transparent; }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-icon { font-size: 18px; display: block; margin-bottom: 2px; }
+
+  /* ── Views ── */
+  #views { flex: 1; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; }
+  .view { display: none; padding: 14px; animation: fadein 0.2s ease; }
+  .view.active { display: block; }
+  @keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+  /* ── Permission screen ── */
+  #perm-screen { position: fixed; inset: 0; background: var(--bg0); z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px; text-align: center; }
+  #perm-screen h2 { font-size: 22px; font-weight: 600; margin-bottom: 10px; }
+  #perm-screen p { color: var(--text2); font-size: 14px; line-height: 1.6; margin-bottom: 28px; max-width: 280px; }
+  #perm-btn { background: var(--accent); color: var(--bg0); border: none; border-radius: var(--r); padding: 14px 32px; font-size: 15px; font-weight: 600; cursor: pointer; }
+  #perm-btn:active { opacity: 0.8; }
+
+  /* ── Cards & sections ── */
+  .section-label { font-size: 10px; font-weight: 600; color: var(--text3); letter-spacing: 0.1em; text-transform: uppercase; margin: 16px 0 8px; }
+  .card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r); padding: 14px; margin-bottom: 10px; }
+  .card-title { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 10px; }
+
+  /* ── Metric grid ── */
+  .metric-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px; }
+  .metric { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r); padding: 12px 10px; }
+  .metric-label { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 5px; }
+  .metric-value { font-size: 20px; font-weight: 600; font-family: var(--mono); line-height: 1; }
+  .metric-unit { font-size: 10px; color: var(--text2); margin-top: 3px; }
+  .metric.ax .metric-value { color: var(--red); }
+  .metric.ay .metric-value { color: var(--accent); }
+  .metric.az .metric-value { color: var(--blue); }
+  .metric.gx .metric-value { color: var(--red); }
+  .metric.gy .metric-value { color: var(--accent); }
+  .metric.gz .metric-value { color: var(--blue); }
+  .metric.roll .metric-value { color: var(--amber); }
+  .metric.pitch .metric-value { color: var(--purple); }
+  .metric.yaw .metric-value { color: var(--blue); }
+  .metric.vx .metric-value { color: var(--red); }
+  .metric.vy .metric-value { color: var(--accent); }
+  .metric.vz .metric-value { color: var(--blue); }
+  .metric.mag .metric-value { color: var(--amber); }
+  .metric.sr .metric-value { color: var(--accent); }
+  .metric.dt .metric-value { color: var(--purple); }
+
+  /* ── Row metrics ── */
+  .metric-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 10px; }
+
+  /* ── Control bar ── */
+  .ctrl-bar { display: flex; gap: 8px; margin-bottom: 14px; }
+  .btn { flex: 1; padding: 11px 8px; border-radius: var(--r); font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid var(--border2); background: var(--bg3); color: var(--text1); transition: background 0.15s; -webkit-tap-highlight-color: transparent; }
+  .btn:active { opacity: 0.75; }
+  .btn.start { background: var(--accent); border-color: var(--accent); color: var(--bg0); }
+  .btn.stop { background: var(--bg3); border-color: var(--red); color: var(--red); }
+  .btn.reset { border-color: var(--border2); color: var(--text2); }
+
+  /* ── Chart canvas ── */
+  .chart-wrap { position: relative; width: 100%; margin: 0; }
+  .chart-wrap canvas { display: block; width: 100% !important; }
+
+  /* ── 3D cube ── */
+  #cube-container { perspective: 300px; display: flex; align-items: center; justify-content: center; height: 160px; margin: 10px 0; }
+  #phone-cube { width: 70px; height: 120px; position: relative; transform-style: preserve-3d; transition: transform 0.05s linear; }
+  .face { position: absolute; border: 1px solid rgba(28, 201, 138, 0.3); }
+  .face.front  { width: 70px; height: 120px; background: rgba(28,201,138,0.08); transform: translateZ(9px); }
+  .face.back   { width: 70px; height: 120px; background: rgba(28,201,138,0.04); transform: rotateY(180deg) translateZ(9px); }
+  .face.right  { width: 18px; height: 120px; background: rgba(74,158,255,0.06); transform: rotateY(90deg) translateZ(61px); }
+  .face.left   { width: 18px; height: 120px; background: rgba(74,158,255,0.06); transform: rotateY(-90deg) translateZ(9px); }
+  .face.top    { width: 70px; height: 18px; background: rgba(255,90,90,0.06); transform: rotateX(90deg) translateZ(111px); }
+  .face.bottom { width: 70px; height: 18px; background: rgba(255,90,90,0.06); transform: rotateX(-90deg) translateZ(9px); }
+  .phone-screen { position: absolute; top: 10px; left: 5px; right: 5px; bottom: 20px; background: rgba(28,201,138,0.15); border-radius: 4px; transform: translateZ(10px); }
+  .phone-btn { position: absolute; bottom: 5px; left: 50%; transform: translateX(-50%) translateZ(10px); width: 16px; height: 16px; border-radius: 50%; border: 1px solid rgba(28,201,138,0.4); }
+
+  /* ── Trajectory canvas ── */
+  #traj-wrap { position: relative; margin: 8px 0; }
+  #traj-canvas { border: 1px solid var(--border); border-radius: var(--r); background: var(--bg1); display: block; }
+
+  /* ── Filter selector ── */
+  .filter-row { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+  .filter-chip { padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 500; cursor: pointer; border: 1px solid var(--border2); background: var(--bg3); color: var(--text2); -webkit-tap-highlight-color: transparent; }
+  .filter-chip.active { background: var(--accent); border-color: var(--accent); color: var(--bg0); }
+
+  /* ── Slider ── */
+  .slider-row { display: flex; align-items: center; gap: 10px; margin: 8px 0; font-size: 12px; color: var(--text2); }
+  .slider-row label { flex-shrink: 0; width: 40px; }
+  .slider-row input[type=range] { flex: 1; accent-color: var(--accent); }
+  .slider-row span { width: 36px; text-align: right; font-family: var(--mono); color: var(--text1); }
+
+  /* ── Info rows ── */
+  .info-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .info-row:last-child { border-bottom: none; }
+  .info-key { color: var(--text2); }
+  .info-val { font-family: var(--mono); font-size: 12px; color: var(--text1); }
+
+  /* ── Drift badge ── */
+  .drift-badge { display: inline-block; padding: 3px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+  .drift-badge.low { background: rgba(28,201,138,0.15); color: var(--accent); }
+  .drift-badge.med { background: rgba(245,166,35,0.15); color: var(--amber); }
+  .drift-badge.high { background: rgba(255,90,90,0.15); color: var(--red); }
+
+  /* ── Export btn ── */
+  .export-btn { width: 100%; padding: 12px; border-radius: var(--r); background: var(--bg3); border: 1px solid var(--border2); color: var(--text1); font-size: 13px; font-weight: 600; cursor: pointer; margin-top: 8px; }
+  .export-btn:active { opacity: 0.75; }
+
+  /* ── Warning bar ── */
+  .warn-bar { background: rgba(245,166,35,0.1); border: 1px solid rgba(245,166,35,0.25); border-radius: var(--r); padding: 10px 12px; font-size: 12px; color: var(--amber); margin-bottom: 10px; line-height: 1.5; display: none; }
+  .warn-bar.show { display: block; }
+</style>
+</head>
+<body>
+
+<!-- Permission screen (iOS) -->
+<div id="perm-screen">
+  <div style="width:56px;height:56px;background:var(--accent);border-radius:14px;display:flex;align-items:center;justify-content:center;margin-bottom:20px;">
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#0b0e14" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+  </div>
+  <h2>IMU Navigator</h2>
+  <p>This app reads your phone's accelerometer and gyroscope to estimate motion in real time. Tap below to grant sensor access.</p>
+  <button id="perm-btn" onclick="requestSensorPermission()">Enable Sensors</button>
+</div>
+
+<div id="app">
+  <div id="header">
+    <div class="logo">
+      <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+    </div>
+    <h1>IMU Nav</h1>
+    <div class="status">
+      <div class="dot" id="live-dot"></div>
+      <span id="status-text">Stopped</span>
+    </div>
+  </div>
+
+  <div id="tabs">
+    <div class="tab active" onclick="switchTab('dash')" data-tab="dash">
+      <span class="tab-icon">⊞</span>DASH
+    </div>
+    <div class="tab" onclick="switchTab('orient')" data-tab="orient">
+      <span class="tab-icon">◈</span>ORIENT
+    </div>
+    <div class="tab" onclick="switchTab('motion')" data-tab="motion">
+      <span class="tab-icon">↗</span>MOTION
+    </div>
+    <div class="tab" onclick="switchTab('analysis')" data-tab="analysis">
+      <span class="tab-icon">≋</span>ANALYSIS
+    </div>
+  </div>
+
+  <div id="views">
+
+    <!-- ══ DASHBOARD ══ -->
+    <div class="view active" id="view-dash">
+      <div class="warn-bar" id="warn-bar">⚠ Sensor drift detected. Position estimate may be inaccurate. Consider pressing Reset.</div>
+
+      <div class="ctrl-bar">
+        <button class="btn start" id="btn-start" onclick="startSensors()">▶ Start</button>
+        <button class="btn stop" id="btn-stop" onclick="stopSensors()" style="display:none">■ Stop</button>
+        <button class="btn reset" onclick="resetState()">↺ Reset</button>
+      </div>
+
+      <div class="section-label">Accelerometer (m/s²)</div>
+      <div class="metric-grid">
+        <div class="metric ax"><div class="metric-label">X</div><div class="metric-value" id="d-ax">—</div><div class="metric-unit">m/s²</div></div>
+        <div class="metric ay"><div class="metric-label">Y</div><div class="metric-value" id="d-ay">—</div><div class="metric-unit">m/s²</div></div>
+        <div class="metric az"><div class="metric-label">Z</div><div class="metric-value" id="d-az">—</div><div class="metric-unit">m/s²</div></div>
+      </div>
+
+      <div class="section-label">Gyroscope (°/s)</div>
+      <div class="metric-grid">
+        <div class="metric gx"><div class="metric-label">α</div><div class="metric-value" id="d-gx">—</div><div class="metric-unit">°/s</div></div>
+        <div class="metric gy"><div class="metric-label">β</div><div class="metric-value" id="d-gy">—</div><div class="metric-unit">°/s</div></div>
+        <div class="metric gz"><div class="metric-label">γ</div><div class="metric-value" id="d-gz">—</div><div class="metric-unit">°/s</div></div>
+      </div>
+
+      <div class="section-label">System</div>
+      <div class="metric-grid">
+        <div class="metric mag"><div class="metric-label">|a|</div><div class="metric-value" id="d-mag">—</div><div class="metric-unit">m/s²</div></div>
+        <div class="metric sr"><div class="metric-label">Rate</div><div class="metric-value" id="d-sr">—</div><div class="metric-unit">Hz</div></div>
+        <div class="metric dt"><div class="metric-label">Δt</div><div class="metric-value" id="d-dt">—</div><div class="metric-unit">ms</div></div>
+      </div>
+
+      <div class="section-label">Velocity (m/s)</div>
+      <div class="metric-grid">
+        <div class="metric vx"><div class="metric-label">X</div><div class="metric-value" id="d-vx">—</div><div class="metric-unit">m/s</div></div>
+        <div class="metric vy"><div class="metric-label">Y</div><div class="metric-value" id="d-vy">—</div><div class="metric-unit">m/s</div></div>
+        <div class="metric vz"><div class="metric-label">Z</div><div class="metric-value" id="d-vz">—</div><div class="metric-unit">m/s</div></div>
+      </div>
+
+      <div class="section-label">Position (m)</div>
+      <div class="metric-grid">
+        <div class="metric ax"><div class="metric-label">X</div><div class="metric-value" id="d-px">—</div><div class="metric-unit">m</div></div>
+        <div class="metric ay"><div class="metric-label">Y</div><div class="metric-value" id="d-py">—</div><div class="metric-unit">m</div></div>
+        <div class="metric az"><div class="metric-label">Z</div><div class="metric-value" id="d-pz">—</div><div class="metric-unit">m</div></div>
+      </div>
+    </div>
+
+    <!-- ══ ORIENTATION ══ -->
+    <div class="view" id="view-orient">
+      <div class="section-label">3D phone model</div>
+      <div class="card" style="padding:8px;">
+        <div id="cube-container">
+          <div id="phone-cube">
+            <div class="face front"><div class="phone-screen"></div><div class="phone-btn"></div></div>
+            <div class="face back"></div>
+            <div class="face right"></div>
+            <div class="face left"></div>
+            <div class="face top"></div>
+            <div class="face bottom"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-label">Euler angles</div>
+      <div class="metric-grid">
+        <div class="metric roll"><div class="metric-label">Roll</div><div class="metric-value" id="o-roll">0°</div><div class="metric-unit">rotation</div></div>
+        <div class="metric pitch"><div class="metric-label">Pitch</div><div class="metric-value" id="o-pitch">0°</div><div class="metric-unit">tilt</div></div>
+        <div class="metric yaw"><div class="metric-label">Yaw</div><div class="metric-value" id="o-yaw">0°</div><div class="metric-unit">heading</div></div>
+      </div>
+
+      <div class="section-label">Quaternion</div>
+      <div class="card">
+        <div class="card-title">q = w + xi + yj + zk</div>
+        <div class="metric-grid">
+          <div class="metric"><div class="metric-label">w</div><div class="metric-value" id="q-w" style="color:var(--text1);font-size:16px">1.000</div></div>
+          <div class="metric"><div class="metric-label">x</div><div class="metric-value" id="q-x" style="color:var(--red);font-size:16px">0.000</div></div>
+          <div class="metric"><div class="metric-label">y</div><div class="metric-value" id="q-y" style="color:var(--accent);font-size:16px">0.000</div></div>
+        </div>
+        <div class="metric-grid" style="margin-top:8px;">
+          <div class="metric"><div class="metric-label">z</div><div class="metric-value" id="q-z" style="color:var(--blue);font-size:16px">0.000</div></div>
+          <div class="metric"><div class="metric-label">|q|</div><div class="metric-value" id="q-norm" style="color:var(--text1);font-size:16px">1.000</div></div>
+          <div class="metric"><div class="metric-label">α</div><div class="metric-value" id="q-alpha" style="color:var(--amber);font-size:16px">0.98</div></div>
+        </div>
+      </div>
+
+      <div class="section-label">Filter gain (τ)</div>
+      <div class="card">
+        <div class="slider-row">
+          <label>τ (s)</label>
+          <input type="range" id="tau-slider" min="0.1" max="5" step="0.1" value="0.98" oninput="updateTau(this.value)"/>
+          <span id="tau-val">0.98</span>
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px;">Higher τ → more gyro trust. Lower τ → more accel correction.</div>
+      </div>
+    </div>
+
+    <!-- ══ MOTION ══ -->
+    <div class="view" id="view-motion">
+      <div class="section-label">XZ trajectory (top view)</div>
+      <div id="traj-wrap">
+        <canvas id="traj-canvas" width="346" height="220"></canvas>
+      </div>
+
+      <div class="section-label">Acceleration over time</div>
+      <div class="card" style="padding:10px;">
+        <div class="chart-wrap" style="height:140px;"><canvas id="chart-accel" role="img" aria-label="Real-time accelerometer chart">Live accelerometer data</canvas></div>
+      </div>
+
+      <div class="section-label">Velocity over time</div>
+      <div class="card" style="padding:10px;">
+        <div class="chart-wrap" style="height:120px;"><canvas id="chart-vel" role="img" aria-label="Real-time velocity chart">Live velocity data</canvas></div>
+      </div>
+
+      <div class="section-label">ZUPT detection</div>
+      <div class="card">
+        <div class="info-row"><span class="info-key">Status</span><span class="info-val" id="zupt-status">—</span></div>
+        <div class="info-row"><span class="info-key">|a_corrected|</span><span class="info-val" id="zupt-mag">—</span></div>
+        <div class="info-row"><span class="info-key">Resets triggered</span><span class="info-val" id="zupt-count">0</span></div>
+        <div class="slider-row" style="margin-top:8px;">
+          <label>Thresh</label>
+          <input type="range" id="zupt-slider" min="0.01" max="0.3" step="0.01" value="0.05" oninput="updateZupt(this.value)"/>
+          <span id="zupt-val">0.05</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ ANALYSIS ══ -->
+    <div class="view" id="view-analysis">
+      <div class="section-label">Filter mode</div>
+      <div class="filter-row">
+        <div class="filter-chip active" onclick="setFilter('none',this)">None</div>
+        <div class="filter-chip" onclick="setFilter('mavg',this)">Moving avg</div>
+        <div class="filter-chip" onclick="setFilter('biquad',this)">Biquad IIR</div>
+      </div>
+
+      <div class="section-label">Raw vs filtered acceleration</div>
+      <div class="card" style="padding:10px;">
+        <div class="chart-wrap" style="height:160px;"><canvas id="chart-compare" role="img" aria-label="Raw vs filtered acceleration comparison">Comparison chart</canvas></div>
+      </div>
+
+      <div class="section-label">Position drift magnitude</div>
+      <div class="card" style="padding:10px;">
+        <div class="chart-wrap" style="height:120px;"><canvas id="chart-drift" role="img" aria-label="Position drift over time">Drift chart</canvas></div>
+      </div>
+
+      <div class="section-label">Session stats</div>
+      <div class="card">
+        <div class="info-row"><span class="info-key">Samples collected</span><span class="info-val" id="stat-samples">0</span></div>
+        <div class="info-row"><span class="info-key">Session duration</span><span class="info-val" id="stat-duration">0s</span></div>
+        <div class="info-row"><span class="info-key">Drift level</span><span id="stat-drift" class="drift-badge low">low</span></div>
+        <div class="info-row"><span class="info-key">Peak |velocity|</span><span class="info-val" id="stat-peakv">0 m/s</span></div>
+        <div class="info-row"><span class="info-key">Peak |position|</span><span class="info-val" id="stat-peakp">0 m</span></div>
+        <div class="info-row"><span class="info-key">Filter</span><span class="info-val" id="stat-filter">none</span></div>
+        <div class="info-row"><span class="info-key">Avg sample rate</span><span class="info-val" id="stat-sr">—</span></div>
+      </div>
+
+      <button class="export-btn" onclick="exportCSV()">⬇ Export session CSV</button>
+    </div>
+
+  </div><!-- /views -->
+</div><!-- /app -->
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+/* ═══════════════════════════════════════
+   QUATERNION MODULE
+═══════════════════════════════════════ */
+const Q = {
+  identity: () => [1, 0, 0, 0],
+  mul(a, b) {
+    const [aw,ax,ay,az] = a, [bw,bx,by,bz] = b;
+    return [
+      aw*bw - ax*bx - ay*by - az*bz,
+      aw*bx + ax*bw + ay*bz - az*by,
+      aw*by - ax*bz + ay*bw + az*bx,
+      aw*bz + ax*by - ay*bx + az*bw
+    ];
+  },
+  norm(q) {
+    const n = Math.sqrt(q[0]*q[0]+q[1]*q[1]+q[2]*q[2]+q[3]*q[3]);
+    return n > 0 ? [q[0]/n, q[1]/n, q[2]/n, q[3]/n] : Q.identity();
+  },
+  magnitude(q) {
+    return Math.sqrt(q[0]*q[0]+q[1]*q[1]+q[2]*q[2]+q[3]*q[3]);
+  },
+  // Integrate gyroscope angular velocity into quaternion
+  integrateGyro(q, gx, gy, gz, dt) {
+    const halfDt = dt * 0.5;
+    const dq = [1, gx*halfDt, gy*halfDt, gz*halfDt];
+    return Q.norm(Q.mul(q, dq));
+  },
+  // From accelerometer measurement, compute correction quaternion
+  // Expected gravity in body frame: rotate world [0,0,1] by q^-1
+  accelCorrection(q, ax, ay, az) {
+    const amag = Math.sqrt(ax*ax+ay*ay+az*az);
+    if (amag < 0.1) return q;
+    const nx = ax/amag, ny = ay/amag, nz = az/amag;
+    // Expected gravity direction from current quaternion
+    const [w,x,y,z] = q;
+    const ex = 2*(x*z - w*y);
+    const ey = 2*(w*x + y*z);
+    const ez = w*w - x*x - y*y + z*z;
+    // Cross product = error
+    const errX = ny*ez - nz*ey;
+    const errY = nz*ex - nx*ez;
+    const errZ = nx*ey - ny*ex;
+    // Small rotation quaternion from error
+    const gain = 0.1;
+    return Q.norm(Q.mul(q, [1, errX*gain, errY*gain, errZ*gain]));
+  },
+  // SLERP between two quaternions
+  slerp(a, b, t) {
+    let dot = a[0]*b[0]+a[1]*b[1]+a[2]*b[2]+a[3]*b[3];
+    if (dot < 0) { b = b.map(v=>-v); dot = -dot; }
+    if (dot > 0.9995) {
+      return Q.norm(a.map((v,i) => v + t*(b[i]-v)));
+    }
+    const theta0 = Math.acos(dot);
+    const sinT0 = Math.sin(theta0);
+    const thetaT = theta0 * t;
+    const s1 = Math.cos(thetaT) - dot * Math.sin(thetaT) / sinT0;
+    const s2 = Math.sin(thetaT) / sinT0;
+    return a.map((v,i) => s1*v + s2*b[i]);
+  },
+  // Convert quaternion to Euler angles (degrees)
+  toEuler(q) {
+    const [w,x,y,z] = q;
+    const roll  = Math.atan2(2*(w*x+y*z), 1-2*(x*x+y*y)) * 180/Math.PI;
+    const sinP  = 2*(w*y-z*x);
+    const pitch = Math.abs(sinP)>=1 ? Math.sign(sinP)*90 : Math.asin(sinP)*180/Math.PI;
+    const yaw   = Math.atan2(2*(w*z+x*y), 1-2*(y*y+z*z)) * 180/Math.PI;
+    return [roll, pitch, yaw];
+  },
+  // Rotate a vector v by quaternion q
+  rotateVec(q, v) {
+    const [w,qx,qy,qz] = q, [vx,vy,vz] = v;
+    const tx = 2*(qy*vz - qz*vy);
+    const ty = 2*(qz*vx - qx*vz);
+    const tz = 2*(qx*vy - qy*vx);
+    return [vx + w*tx + qy*tz - qz*ty,
+            vy + w*ty + qz*tx - qx*tz,
+            vz + w*tz + qx*ty - qy*tx];
+  }
+};
+
+/* ═══════════════════════════════════════
+   FILTER MODULE
+═══════════════════════════════════════ */
+const Filters = {
+  mavgBuf: { x:[], y:[], z:[] },
+  N: 5,
+  // Biquad low-pass coefficients (fs=100Hz, fc=5Hz)
+  // Butterworth 2nd order: computed offline
+  bqState: { x:[0,0,0,0], y:[0,0,0,0], z:[0,0,0,0] },
+  bqB: [0.0048, 0.0097, 0.0048],
+  bqA: [1, -1.8637, 0.8752],
+
+  movingAvg(key, val) {
+    const buf = this.mavgBuf[key];
+    buf.push(val); if (buf.length > this.N) buf.shift();
+    return buf.reduce((s,v)=>s+v,0)/buf.length;
+  },
+  biquad(key, x0) {
+    const s = this.bqState[key];
+    const y0 = this.bqB[0]*x0 + this.bqB[1]*s[0] + this.bqB[2]*s[1]
+               - this.bqA[1]*s[2] - this.bqA[2]*s[3];
+    s[1] = s[0]; s[0] = x0; s[3] = s[2]; s[2] = y0;
+    return y0;
+  },
+  apply(mode, ax, ay, az) {
+    if (mode === 'mavg') {
+      return [this.movingAvg('x',ax), this.movingAvg('y',ay), this.movingAvg('z',az)];
+    } else if (mode === 'biquad') {
+      return [this.biquad('x',ax), this.biquad('y',ay), this.biquad('z',az)];
+    }
+    return [ax, ay, az];
+  },
+  reset() {
+    this.mavgBuf = { x:[], y:[], z:[] };
+    this.bqState = { x:[0,0,0,0], y:[0,0,0,0], z:[0,0,0,0] };
+  }
+};
+
+/* ═══════════════════════════════════════
+   STATE STORE (circular ring buffer)
+═══════════════════════════════════════ */
+const RING_SIZE = 300;
+const Store = {
+  buf: [],
+  push(sample) {
+    this.buf.push(sample);
+    if (this.buf.length > RING_SIZE) this.buf.shift();
+  },
+  getLatest() { return this.buf[this.buf.length - 1] || null; },
+  getWindow(n) { return this.buf.slice(-n); },
+  clear() { this.buf = []; }
+};
+
+/* ═══════════════════════════════════════
+   APP STATE
+═══════════════════════════════════════ */
+let running = false;
+let orientation = Q.identity();
+let velocity    = [0, 0, 0];
+let position    = [0, 0, 0];
+let tauMs    = 0.98;
+let zuptThresh = 0.05;
+let filterMode = 'none';
+let zuptCount  = 0;
+let peakVel  = 0, peakPos  = 0;
+let sessionStart = null;
+let totalSamples = 0;
+let srSamples = 0, srTimer = 0;
+let measuredHz = 0;
+let currentDt  = 0.01;
+let lastEvTime = 0;
+let trajPoints  = [];   // [{x,z}] for 2D top-view trajectory
+const GRAVITY = 9.81;
+
+/* ═══════════════════════════════════════
+   SENSOR MANAGER
+═══════════════════════════════════════ */
+function requestSensorPermission() {
+  if (typeof DeviceMotionEvent !== 'undefined' &&
+      typeof DeviceMotionEvent.requestPermission === 'function') {
+    DeviceMotionEvent.requestPermission()
+      .then(state => {
+        if (state === 'granted') hidePerm();
+        else alert('Sensor permission denied. Please allow in Settings.');
+      }).catch(() => hidePerm());
+  } else {
+    hidePerm();
+  }
+}
+
+function hidePerm() {
+  document.getElementById('perm-screen').style.display = 'none';
+}
+
+function onMotion(e) {
+  if (!running) return;
+
+  // ── Δt ──
+  const dtRaw = (e.interval || 0) / 1000;    // event.interval is in ms
+  currentDt = (dtRaw > 0 && dtRaw < 0.5) ? dtRaw : 0.016;
+
+  // ── Raw sensor values ──
+  const aig = e.accelerationIncludingGravity || {};
+  const rr  = e.rotationRate || {};
+  const ax_raw = aig.x || 0;
+  const ay_raw = aig.y || 0;
+  const az_raw = aig.z || 0;
+  const gx_deg = rr.alpha || 0;
+  const gy_deg = rr.beta  || 0;
+  const gz_deg = rr.gamma || 0;
+  const gx = gx_deg * Math.PI/180;
+  const gy = gy_deg * Math.PI/180;
+  const gz = gz_deg * Math.PI/180;
+
+  // ── Filter raw acceleration ──
+  const [ax_f, ay_f, az_f] = Filters.apply(filterMode, ax_raw, ay_raw, az_raw);
+
+  // ── Orientation update (complementary filter) ──
+  const alpha = tauMs / (tauMs + currentDt);
+  // Gyro integration
+  let qGyro = Q.integrateGyro(orientation, gx, gy, gz, currentDt);
+  // Accelerometer correction
+  let qAccel = Q.accelCorrection(orientation, ax_f, ay_f, az_f);
+  // SLERP blend
+  orientation = Q.norm(Q.slerp(qAccel, qGyro, alpha));
+
+  // ── Gravity removal ──
+  // Rotate gravity world vector [0, 0, GRAVITY] into phone frame
+  const gWorld = [0, 0, GRAVITY];
+  const gBody  = Q.rotateVec(orientation, gWorld);
+  const ax_m   = ax_f - gBody[0];
+  const ay_m   = ay_f - gBody[1];
+  const az_m   = az_f - gBody[2];
+  const aMag   = Math.sqrt(ax_m*ax_m + ay_m*ay_m + az_m*az_m);
+
+  // ── ZUPT ──
+  const isStationary = aMag < zuptThresh;
+  if (isStationary) {
+    velocity = [0, 0, 0];
+    zuptCount++;
+  } else {
+    velocity[0] += ax_m * currentDt;
+    velocity[1] += ay_m * currentDt;
+    velocity[2] += az_m * currentDt;
+  }
+  position[0] += velocity[0] * currentDt;
+  position[1] += velocity[1] * currentDt;
+  position[2] += velocity[2] * currentDt;
+
+  const vMag = Math.sqrt(velocity[0]**2 + velocity[1]**2 + velocity[2]**2);
+  const pMag = Math.sqrt(position[0]**2 + position[1]**2 + position[2]**2);
+  if (vMag > peakVel) peakVel = vMag;
+  if (pMag > peakPos) peakPos = pMag;
+
+  // ── Sample rate counter ──
+  totalSamples++;
+  srSamples++;
+  const now = performance.now();
+  if (now - srTimer > 1000) {
+    measuredHz = srSamples;
+    srSamples = 0;
+    srTimer = now;
+  }
+
+  // ── Trajectory ──
+  trajPoints.push({ x: position[0], z: position[2] });
+  if (trajPoints.length > 500) trajPoints.shift();
+
+  // ── Store sample ──
+  Store.push({
+    t: now,
+    ax: ax_raw, ay: ay_raw, az: az_raw,
+    ax_f, ay_f, az_f,
+    gx: gx_deg, gy: gy_deg, gz: gz_deg,
+    orientation: [...orientation],
+    vx: velocity[0], vy: velocity[1], vz: velocity[2],
+    px: position[0], py: position[1], pz: position[2],
+    aMag, isStationary, pMag
+  });
+}
+
+window.addEventListener('devicemotion', onMotion, true);
+
+function startSensors() {
+  running = true;
+  sessionStart = Date.now();
+  srTimer = performance.now();
+  document.getElementById('btn-start').style.display = 'none';
+  document.getElementById('btn-stop').style.display = '';
+  document.getElementById('live-dot').classList.add('live');
+  document.getElementById('status-text').textContent = 'Live';
+}
+
+function stopSensors() {
+  running = false;
+  document.getElementById('btn-start').style.display = '';
+  document.getElementById('btn-stop').style.display = 'none';
+  document.getElementById('live-dot').classList.remove('live');
+  document.getElementById('status-text').textContent = 'Stopped';
+}
+
+function resetState() {
+  orientation = Q.identity();
+  velocity    = [0,0,0];
+  position    = [0,0,0];
+  zuptCount   = 0; peakVel = 0; peakPos = 0;
+  Store.clear(); trajPoints = [];
+  Filters.reset();
+  totalSamples = 0;
+  sessionStart = running ? Date.now() : null;
+  document.getElementById('warn-bar').classList.remove('show');
+}
+
+/* ═══════════════════════════════════════
+   SETTINGS HANDLERS
+═══════════════════════════════════════ */
+function updateTau(v) {
+  tauMs = parseFloat(v);
+  document.getElementById('tau-val').textContent = parseFloat(v).toFixed(2);
+  const alpha = tauMs / (tauMs + currentDt);
+  document.getElementById('q-alpha').textContent = alpha.toFixed(3);
+}
+function updateZupt(v) {
+  zuptThresh = parseFloat(v);
+  document.getElementById('zupt-val').textContent = parseFloat(v).toFixed(2);
+}
+function setFilter(mode, el) {
+  filterMode = mode;
+  document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('stat-filter').textContent = mode;
+  Filters.reset();
+}
+
+/* ═══════════════════════════════════════
+   TAB SWITCHER
+═══════════════════════════════════════ */
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === 'view-'+name));
+}
+
+/* ═══════════════════════════════════════
+   CHARTS (Chart.js)
+═══════════════════════════════════════ */
+function makeChart(id, label, colors, yMin, yMax) {
+  const ctx = document.getElementById(id).getContext('2d');
+  const labels = Array(60).fill('');
+  const makeDs = (label, color) => ({
+    label, data: Array(60).fill(null),
+    borderColor: color, borderWidth: 1.5,
+    pointRadius: 0, tension: 0.3, fill: false
+  });
+  const ds = colors.map((c,i) => makeDs(['X','Y','Z'][i], c));
+  return new Chart(ctx, {
+    type: 'line',
+    data: { labels, datasets: ds },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { display: false },
+        y: {
+          min: yMin, max: yMax,
+          ticks: { color: '#4e5972', font: { size: 10 }, maxTicksLimit: 5 },
+          grid: { color: 'rgba(255,255,255,0.04)' }
+        }
+      }
+    }
+  });
+}
+
+function makeCompareChart() {
+  const ctx = document.getElementById('chart-compare').getContext('2d');
+  return new Chart(ctx, {
+    type: 'line',
+    data: { labels: Array(60).fill(''), datasets: [
+      { label:'Raw X', data: Array(60).fill(null), borderColor:'#ff5a5a', borderWidth:1.5, pointRadius:0, tension:0.3, fill:false },
+      { label:'Filtered X', data: Array(60).fill(null), borderColor:'#1fc98a', borderWidth:1.5, pointRadius:0, tension:0.3, fill:false, borderDash:[4,2] }
+    ]},
+    options: { responsive:true, maintainAspectRatio:false, animation:false,
+      plugins:{ legend:{ labels:{ color:'#8b96b0', font:{size:11}, boxWidth:16 } } },
+      scales:{ x:{display:false}, y:{ ticks:{color:'#4e5972',font:{size:10},maxTicksLimit:5}, grid:{color:'rgba(255,255,255,0.04)'} } }
+    }
+  });
+}
+
+function makeDriftChart() {
+  const ctx = document.getElementById('chart-drift').getContext('2d');
+  return new Chart(ctx, {
+    type: 'line',
+    data: { labels: Array(60).fill(''), datasets: [{
+      label:'|position| (m)', data: Array(60).fill(null),
+      borderColor:'#f5a623', borderWidth:1.5, pointRadius:0, tension:0.3,
+      fill:true, backgroundColor:'rgba(245,166,35,0.07)'
+    }]},
+    options: { responsive:true, maintainAspectRatio:false, animation:false,
+      plugins:{ legend:{ labels:{ color:'#8b96b0', font:{size:11}, boxWidth:16 } } },
+      scales:{ x:{display:false}, y:{ min:0, ticks:{color:'#4e5972',font:{size:10},maxTicksLimit:5}, grid:{color:'rgba(255,255,255,0.04)'} } }
+    }
+  });
+}
+
+function pushData(chart, dsIdx, val) {
+  const ds = chart.data.datasets[dsIdx];
+  ds.data.push(val); if(ds.data.length > 60) ds.data.shift();
+  chart.data.labels.push(''); if(chart.data.labels.length > 60) chart.data.labels.shift();
+}
+
+let chartAccel, chartVel, chartCompare, chartDrift;
+window.addEventListener('load', () => {
+  chartAccel   = makeChart('chart-accel',   'Accel',  ['#ff5a5a','#1fc98a','#4a9eff'], -20, 20);
+  chartVel     = makeChart('chart-vel',     'Vel',    ['#ff5a5a','#1fc98a','#4a9eff'], -5, 5);
+  chartCompare = makeCompareChart();
+  chartDrift   = makeDriftChart();
+});
+
+/* ═══════════════════════════════════════
+   TRAJECTORY CANVAS
+═══════════════════════════════════════ */
+function drawTrajectory() {
+  const canvas = document.getElementById('traj-canvas');
+  const W = canvas.width, H = canvas.height;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,W,H);
+  // Grid
+  ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+  ctx.lineWidth = 0.5;
+  for(let i=0;i<=W;i+=W/8) { ctx.beginPath();ctx.moveTo(i,0);ctx.lineTo(i,H);ctx.stroke(); }
+  for(let i=0;i<=H;i+=H/6) { ctx.beginPath();ctx.moveTo(0,i);ctx.lineTo(W,i);ctx.stroke(); }
+  // Center cross
+  ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+  ctx.setLineDash([4,4]);
+  ctx.beginPath(); ctx.moveTo(W/2,0); ctx.lineTo(W/2,H); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0,H/2); ctx.lineTo(W,H/2); ctx.stroke();
+  ctx.setLineDash([]);
+  // Labels
+  ctx.fillStyle = 'rgba(139,150,176,0.6)'; ctx.font = '10px monospace';
+  ctx.fillText('+X →', W-28, H/2-4);
+  ctx.fillText('+Z ↓', W/2+4, 12);
+
+  if (trajPoints.length < 2) {
+    ctx.fillStyle = 'rgba(139,150,176,0.4)'; ctx.font = '12px system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillText('Start sensors to see trajectory', W/2, H/2+18);
+    ctx.textAlign = 'left';
+    return;
+  }
+  // Auto-scale
+  const xs = trajPoints.map(p=>p.x), zs = trajPoints.map(p=>p.z);
+  const minX=Math.min(...xs), maxX=Math.max(...xs), minZ=Math.min(...zs), maxZ=Math.max(...zs);
+  const spanX = Math.max(maxX-minX, 0.5), spanZ = Math.max(maxZ-minZ, 0.5);
+  const scale = Math.min((W-40)/spanX, (H-40)/spanZ);
+  const cx=(minX+maxX)/2, cz=(minZ+maxZ)/2;
+  const toScreen = p => [W/2+(p.x-cx)*scale, H/2+(p.z-cz)*scale];
+
+  // Path colored by index (old=dim, new=bright)
+  for(let i=1;i<trajPoints.length;i++) {
+    const [x1,y1] = toScreen(trajPoints[i-1]);
+    const [x2,y2] = toScreen(trajPoints[i]);
+    const t = i/trajPoints.length;
+    ctx.strokeStyle = `rgba(31,201,138,${0.15+t*0.85})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+  }
+  // Current dot
+  const [cx2,cy2] = toScreen(trajPoints[trajPoints.length-1]);
+  ctx.fillStyle = '#1fc98a';
+  ctx.beginPath(); ctx.arc(cx2,cy2,4,0,Math.PI*2); ctx.fill();
+  // Start dot
+  const [sx,sy] = toScreen(trajPoints[0]);
+  ctx.fillStyle = '#4a9eff';
+  ctx.beginPath(); ctx.arc(sx,sy,3,0,Math.PI*2); ctx.fill();
+}
+
+/* ═══════════════════════════════════════
+   UI UPDATE LOOP (60fps)
+═══════════════════════════════════════ */
+let frameCount = 0;
+function uiLoop() {
+  requestAnimationFrame(uiLoop);
+  frameCount++;
+  const s = Store.getLatest();
+  if (!s) return;
+
+  const fmt1 = v => (v >= 0 ? ' ':'')+v.toFixed(1);
+  const fmt2 = v => v.toFixed(2);
+  const fmt3 = v => v.toFixed(3);
+
+  // ── Dashboard ──
+  document.getElementById('d-ax').textContent = fmt1(s.ax);
+  document.getElementById('d-ay').textContent = fmt1(s.ay);
+  document.getElementById('d-az').textContent = fmt1(s.az);
+  document.getElementById('d-gx').textContent = fmt1(s.gx);
+  document.getElementById('d-gy').textContent = fmt1(s.gy);
+  document.getElementById('d-gz').textContent = fmt1(s.gz);
+  document.getElementById('d-mag').textContent = Math.sqrt(s.ax**2+s.ay**2+s.az**2).toFixed(2);
+  document.getElementById('d-sr').textContent  = measuredHz;
+  document.getElementById('d-dt').textContent  = (currentDt*1000).toFixed(1);
+  document.getElementById('d-vx').textContent  = fmt2(s.vx);
+  document.getElementById('d-vy').textContent  = fmt2(s.vy);
+  document.getElementById('d-vz').textContent  = fmt2(s.vz);
+  document.getElementById('d-px').textContent  = fmt2(s.px);
+  document.getElementById('d-py').textContent  = fmt2(s.py);
+  document.getElementById('d-pz').textContent  = fmt2(s.pz);
+
+  // Drift warning
+  if (s.pMag > 5) document.getElementById('warn-bar').classList.add('show');
+
+  // ── Orientation ──
+  const [roll,pitch,yaw] = Q.toEuler(orientation);
+  document.getElementById('o-roll').textContent  = Math.round(roll)+'°';
+  document.getElementById('o-pitch').textContent = Math.round(pitch)+'°';
+  document.getElementById('o-yaw').textContent   = Math.round(yaw)+'°';
+  document.getElementById('q-w').textContent = fmt3(orientation[0]);
+  document.getElementById('q-x').textContent = fmt3(orientation[1]);
+  document.getElementById('q-y').textContent = fmt3(orientation[2]);
+  document.getElementById('q-z').textContent = fmt3(orientation[3]);
+  document.getElementById('q-norm').textContent = fmt3(Q.magnitude(orientation));
+
+  // CSS 3D cube
+  const cube = document.getElementById('phone-cube');
+  cube.style.transform = `rotateX(${-pitch}deg) rotateY(${yaw}deg) rotateZ(${roll}deg)`;
+
+  // ── Motion / ZUPT ──
+  document.getElementById('zupt-status').textContent = s.isStationary ? '✓ Stationary' : 'Moving';
+  document.getElementById('zupt-status').style.color = s.isStationary ? 'var(--accent)' : 'var(--text1)';
+  document.getElementById('zupt-mag').textContent   = s.aMag.toFixed(4)+' m/s²';
+  document.getElementById('zupt-count').textContent = zuptCount;
+
+  // ── Analysis ──
+  const dur = sessionStart ? Math.round((Date.now()-sessionStart)/1000) : 0;
+  document.getElementById('stat-samples').textContent  = totalSamples;
+  document.getElementById('stat-duration').textContent = dur+'s';
+  document.getElementById('stat-peakv').textContent    = peakVel.toFixed(3)+' m/s';
+  document.getElementById('stat-peakp').textContent    = peakPos.toFixed(3)+' m';
+  const driftEl = document.getElementById('stat-drift');
+  if (s.pMag < 1) { driftEl.textContent='low'; driftEl.className='drift-badge low'; }
+  else if (s.pMag < 5) { driftEl.textContent='med'; driftEl.className='drift-badge med'; }
+  else { driftEl.textContent='high'; driftEl.className='drift-badge high'; }
+  document.getElementById('stat-sr').textContent = measuredHz+' Hz';
+
+  // ── Charts (every 3rd frame to avoid thrash) ──
+  if (frameCount % 3 === 0 && chartAccel) {
+    pushData(chartAccel, 0, s.ax); pushData(chartAccel, 1, s.ay); pushData(chartAccel, 2, s.az);
+    chartAccel.update('none');
+    pushData(chartVel, 0, s.vx); pushData(chartVel, 1, s.vy); pushData(chartVel, 2, s.vz);
+    chartVel.update('none');
+    pushData(chartCompare, 0, s.ax); pushData(chartCompare, 1, s.ax_f);
+    chartCompare.update('none');
+    pushData(chartDrift, 0, s.pMag);
+    chartDrift.update('none');
+  }
+
+  // ── Trajectory (every 5th frame) ──
+  if (frameCount % 5 === 0) drawTrajectory();
+}
+
+/* ═══════════════════════════════════════
+   CSV EXPORT
+═══════════════════════════════════════ */
+function exportCSV() {
+  const rows = Store.buf;
+  if (!rows.length) { alert('No data yet — start sensors first.'); return; }
+  const headers = 't,ax,ay,az,ax_f,ay_f,az_f,gx,gy,gz,qw,qx,qy,qz,vx,vy,vz,px,py,pz,aMag,isStationary';
+  const csv = [headers, ...rows.map(r =>
+    [r.t, r.ax, r.ay, r.az, r.ax_f, r.ay_f, r.az_f,
+     r.gx, r.gy, r.gz,
+     r.orientation[0], r.orientation[1], r.orientation[2], r.orientation[3],
+     r.vx, r.vy, r.vz, r.px, r.py, r.pz,
+     r.aMag, r.isStationary ? 1 : 0].map(v => typeof v === 'number' ? v.toFixed(5) : v).join(',')
+  )].join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'imu_session_' + Date.now() + '.csv';
+  a.click(); URL.revokeObjectURL(url);
+}
+
+/* ═══════════════════════════════════════
+   INIT
+═══════════════════════════════════════ */
+// Auto-hide perm screen on non-iOS (permission not needed)
+if (typeof DeviceMotionEvent === 'undefined' ||
+    typeof DeviceMotionEvent.requestPermission !== 'function') {
+  hidePerm();
+}
+
+requestAnimationFrame(uiLoop);
+</script>
+</body>
+</html>
