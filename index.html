@@ -147,6 +147,35 @@
   .export-btn { width: 100%; padding: 12px; border-radius: var(--r); background: var(--bg3); border: 1px solid var(--border2); color: var(--text1); font-size: 13px; font-weight: 600; cursor: pointer; margin-top: 8px; }
   .export-btn:active { opacity: 0.75; }
 
+  /* ── Calibration ── */
+  .calib-pose-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; margin-bottom: 10px; }
+  .pose-btn { background: var(--bg3); border: 1px solid var(--border2); border-radius: var(--r); padding: 12px 8px; text-align: center; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: border-color 0.2s, background 0.2s; }
+  .pose-btn:active { opacity: 0.7; }
+  .pose-btn.selected { border-color: var(--accent); background: rgba(31,201,138,0.08); }
+  .pose-icon { font-size: 26px; display: block; margin-bottom: 4px; }
+  .pose-label { font-size: 11px; font-weight: 600; color: var(--text1); }
+  .pose-desc { font-size: 10px; color: var(--text3); margin-top: 2px; line-height: 1.3; }
+  .calib-btn { width: 100%; padding: 13px; border-radius: var(--r); background: var(--accent); border: none; color: var(--bg0); font-size: 14px; font-weight: 700; cursor: pointer; margin-top: 4px; letter-spacing: 0.03em; -webkit-tap-highlight-color: transparent; }
+  .calib-btn:active { opacity: 0.8; }
+  .calib-btn:disabled { background: var(--bg3); color: var(--text3); cursor: default; }
+  .calib-status { text-align: center; font-size: 12px; margin-top: 8px; min-height: 18px; transition: color 0.3s; }
+  .calib-progress { width: 100%; height: 3px; background: var(--bg3); border-radius: 2px; margin-top: 8px; overflow: hidden; display: none; }
+  .calib-progress-bar { height: 100%; width: 0%; background: var(--accent); border-radius: 2px; transition: width 0.1s linear; }
+
+  /* ── Axis remap ── */
+  .axis-remap-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 8px; }
+  .axis-cell { background: var(--bg3); border: 1px solid var(--border2); border-radius: var(--r); padding: 10px 6px; text-align: center; }
+  .axis-cell-label { font-size: 10px; color: var(--text3); text-transform: uppercase; margin-bottom: 6px; }
+  .axis-select { width: 100%; background: var(--bg2); border: 1px solid var(--border2); color: var(--text1); border-radius: 4px; padding: 4px; font-size: 12px; text-align: center; }
+  .flip-toggle { display: flex; align-items: center; justify-content: center; gap: 4px; margin-top: 6px; font-size: 11px; color: var(--text2); cursor: pointer; }
+  .flip-toggle input { accent-color: var(--accent); }
+  .remap-apply { width: 100%; padding: 10px; border-radius: var(--r); background: var(--bg3); border: 1px solid var(--border2); color: var(--text1); font-size: 13px; font-weight: 600; cursor: pointer; margin-top: 10px; }
+  .remap-apply:active { opacity: 0.75; }
+
+  /* ── Calib indicator on cube ── */
+  .calib-badge { position: absolute; top: -22px; left: 50%; transform: translateX(-50%); font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 10px; white-space: nowrap; background: rgba(31,201,138,0.15); color: var(--accent); border: 1px solid rgba(31,201,138,0.3); display: none; }
+  .calib-badge.show { display: block; }
+
   /* ── Warning bar ── */
   .warn-bar { background: rgba(245,166,35,0.1); border: 1px solid rgba(245,166,35,0.25); border-radius: var(--r); padding: 10px 12px; font-size: 12px; color: var(--amber); margin-bottom: 10px; line-height: 1.5; display: none; }
   .warn-bar.show { display: block; }
@@ -241,8 +270,11 @@
 
     <!-- ══ ORIENTATION ══ -->
     <div class="view" id="view-orient">
+
+      <!-- 3D model -->
       <div class="section-label">3D phone model</div>
-      <div class="card" style="padding:8px;">
+      <div class="card" style="padding:8px; position:relative;">
+        <div class="calib-badge" id="calib-badge">✓ Calibrated</div>
         <div id="cube-container">
           <div id="phone-cube">
             <div class="face front"><div class="phone-screen"></div><div class="phone-btn"></div></div>
@@ -253,16 +285,95 @@
             <div class="face bottom"></div>
           </div>
         </div>
+        <!-- Axis legend -->
+        <div style="display:flex;justify-content:center;gap:14px;margin-top:4px;font-size:10px;color:var(--text3);">
+          <span style="color:var(--red);">■ X roll</span>
+          <span style="color:var(--purple);">■ Y pitch</span>
+          <span style="color:var(--blue);">■ Z yaw</span>
+        </div>
       </div>
 
-      <div class="section-label">Euler angles</div>
+      <!-- Euler angles -->
+      <div class="section-label">Euler angles (after calibration)</div>
       <div class="metric-grid">
         <div class="metric roll"><div class="metric-label">Roll</div><div class="metric-value" id="o-roll">0°</div><div class="metric-unit">rotation</div></div>
         <div class="metric pitch"><div class="metric-label">Pitch</div><div class="metric-value" id="o-pitch">0°</div><div class="metric-unit">tilt</div></div>
         <div class="metric yaw"><div class="metric-label">Yaw</div><div class="metric-value" id="o-yaw">0°</div><div class="metric-unit">heading</div></div>
       </div>
 
-      <div class="section-label">Quaternion</div>
+      <!-- ── STEP 1: AXIS REMAP ── -->
+      <div class="section-label">Step 1 — axis remapping</div>
+      <div class="card">
+        <div style="font-size:11px;color:var(--text2);margin-bottom:10px;line-height:1.5;">
+          Map each <strong style="color:var(--text1)">model axis</strong> to which <strong style="color:var(--text1)">sensor axis</strong> actually moves it. If tilting your phone forward doesn't move the expected model axis, swap here. Flip ± if the direction is inverted.
+        </div>
+        <div class="axis-remap-grid">
+          <div class="axis-cell">
+            <div class="axis-cell-label" style="color:var(--red);">Model X (roll)</div>
+            <select class="axis-select" id="remap-x-src">
+              <option value="0">Sensor X</option>
+              <option value="1" selected>Sensor Y</option>
+              <option value="2">Sensor Z</option>
+            </select>
+            <label class="flip-toggle"><input type="checkbox" id="remap-x-flip"/> flip ±</label>
+          </div>
+          <div class="axis-cell">
+            <div class="axis-cell-label" style="color:var(--purple);">Model Y (pitch)</div>
+            <select class="axis-select" id="remap-y-src">
+              <option value="0" selected>Sensor X</option>
+              <option value="1">Sensor Y</option>
+              <option value="2">Sensor Z</option>
+            </select>
+            <label class="flip-toggle"><input type="checkbox" id="remap-y-flip"/> flip ±</label>
+          </div>
+          <div class="axis-cell">
+            <div class="axis-cell-label" style="color:var(--blue);">Model Z (yaw)</div>
+            <select class="axis-select" id="remap-z-src">
+              <option value="0">Sensor X</option>
+              <option value="1">Sensor Y</option>
+              <option value="2" selected>Sensor Z</option>
+            </select>
+            <label class="flip-toggle"><input type="checkbox" id="remap-z-flip"/> flip ±</label>
+          </div>
+        </div>
+        <button class="remap-apply" onclick="applyAxisRemap()">↺ Apply remap + reset orientation</button>
+      </div>
+
+      <!-- ── STEP 2: POSE CALIBRATION ── -->
+      <div class="section-label">Step 2 — pose calibration</div>
+      <div class="card">
+        <div style="font-size:11px;color:var(--text2);margin-bottom:10px;line-height:1.5;">
+          Hold your phone in the position shown, keep it still for 2 seconds, then tap Calibrate. This measures the offset quaternion between sensor zero and your intended reference frame.
+        </div>
+        <div class="calib-pose-grid">
+          <div class="pose-btn selected" id="pose-flat" onclick="selectPose('flat',this)">
+            <span class="pose-icon">📱</span>
+            <div class="pose-label">Flat face-up</div>
+            <div class="pose-desc">Phone lying flat, screen facing ceiling</div>
+          </div>
+          <div class="pose-btn" id="pose-portrait" onclick="selectPose('portrait',this)">
+            <span class="pose-icon">🔲</span>
+            <div class="pose-label">Upright portrait</div>
+            <div class="pose-desc">Phone held vertical, screen facing you</div>
+          </div>
+          <div class="pose-btn" id="pose-landscape" onclick="selectPose('landscape',this)">
+            <span class="pose-icon">▬</span>
+            <div class="pose-label">Landscape left</div>
+            <div class="pose-desc">Phone rotated 90° CCW, screen facing you</div>
+          </div>
+          <div class="pose-btn" id="pose-custom" onclick="selectPose('custom',this)">
+            <span class="pose-icon">✋</span>
+            <div class="pose-label">Current pose</div>
+            <div class="pose-desc">Use current phone orientation as reference zero</div>
+          </div>
+        </div>
+        <button class="calib-btn" id="calib-btn" onclick="startCalibration()">⊙ Calibrate now</button>
+        <div class="calib-progress" id="calib-progress"><div class="calib-progress-bar" id="calib-bar"></div></div>
+        <div class="calib-status" id="calib-status" style="color:var(--text3);">No calibration applied</div>
+      </div>
+
+      <!-- ── Quaternion debug ── -->
+      <div class="section-label">Quaternion (calibrated)</div>
       <div class="card">
         <div class="card-title">q = w + xi + yj + zk</div>
         <div class="metric-grid">
@@ -277,6 +388,7 @@
         </div>
       </div>
 
+      <!-- ── Filter gain ── -->
       <div class="section-label">Filter gain (τ)</div>
       <div class="card">
         <div class="slider-row">
@@ -510,8 +622,29 @@ let srSamples = 0, srTimer = 0;
 let measuredHz = 0;
 let currentDt  = 0.01;
 let lastEvTime = 0;
-let trajPoints  = [];   // [{x,z}] for 2D top-view trajectory
+let trajPoints  = [];
 const GRAVITY = 9.81;
+
+/* ── Calibration state ── */
+// calibOffset: quaternion applied as q_display = calibOffset^-1 ⊗ q_sensor
+// This rotates the sensor frame so the reference pose maps to identity
+let calibOffset  = Q.identity();
+let isCalibrated = false;
+
+// Axis remap: each model axis reads from sensorAxes[i] with sign signs[i]
+// Default: model X←sensor Y, model Y←sensor X, model Z←sensor Z
+let axisRemap = { xSrc:1, ySrc:0, zSrc:2, xFlip:false, yFlip:false, zFlip:false };
+
+// Active calibration pose target quaternions (what orientation should look like in that pose)
+const POSE_TARGETS = {
+  flat:      [1, 0,    0,    0   ],   // phone flat face-up = identity
+  portrait:  [0.707, 0.707, 0, 0],   // rotated 90° around X
+  landscape: [0.707, 0, 0, 0.707],   // rotated 90° around Z
+  custom:    null                     // computed at calibration time
+};
+let selectedPose = 'flat';
+let calibSamples = [];
+let calibrating  = false;
 
 /* ═══════════════════════════════════════
    SENSOR MANAGER
@@ -557,28 +690,36 @@ function onMotion(e) {
   const gy = gy_deg * Math.PI/180;
   const gz = gz_deg * Math.PI/180;
 
+  // ── Apply axis remap to gyro ──
+  const gyroRaw = [gx, gy, gz];
+  const gxR = (axisRemap.xFlip ? -1 : 1) * gyroRaw[axisRemap.xSrc];
+  const gyR = (axisRemap.yFlip ? -1 : 1) * gyroRaw[axisRemap.ySrc];
+  const gzR = (axisRemap.zFlip ? -1 : 1) * gyroRaw[axisRemap.zSrc];
+
   // ── Filter raw acceleration ──
   const [ax_f, ay_f, az_f] = Filters.apply(filterMode, ax_raw, ay_raw, az_raw);
 
+  // ── Apply axis remap to filtered accel ──
+  const accelArr = [ax_f, ay_f, az_f];
+  const ax_r = (axisRemap.xFlip ? -1 : 1) * accelArr[axisRemap.xSrc];
+  const ay_r = (axisRemap.yFlip ? -1 : 1) * accelArr[axisRemap.ySrc];
+  const az_r = (axisRemap.zFlip ? -1 : 1) * accelArr[axisRemap.zSrc];
+
+  // ── Collect calibration samples if in progress ──
+  if (calibrating) calibSamples.push([...orientation]);
+
   // ── Orientation update (complementary filter) ──
   const alpha = tauMs / (tauMs + currentDt);
-  // Gyro integration
-  let qGyro = Q.integrateGyro(orientation, gx, gy, gz, currentDt);
-  // Accelerometer correction
-  let qAccel = Q.accelCorrection(orientation, ax_f, ay_f, az_f);
-  // SLERP blend
+  let qGyro  = Q.integrateGyro(orientation, gxR, gyR, gzR, currentDt);
+  let qAccel = Q.accelCorrection(orientation, ax_r, ay_r, az_r);
   orientation = Q.norm(Q.slerp(qAccel, qGyro, alpha));
 
-  // ── Gravity removal ──
-  // Gravity in world frame points down = [0, -GRAVITY, 0] in standard NED
-  // Android accelerometer: Z points up from screen, Y toward top, X toward right
-  // When phone flat on table face-up: az ≈ +9.81
-  // Rotate world gravity [0, 0, -GRAVITY] into body frame via quaternion
+  // ── Gravity removal (using remapped axes) ──
   const gWorld = [0, 0, -GRAVITY];
   const gBody  = Q.rotateVec(orientation, gWorld);
-  const ax_m   = ax_f - gBody[0];
-  const ay_m   = ay_f - gBody[1];
-  const az_m   = az_f - gBody[2];
+  const ax_m   = ax_r - gBody[0];
+  const ay_m   = ay_r - gBody[1];
+  const az_m   = az_r - gBody[2];
   const aMag   = Math.sqrt(ax_m*ax_m + ay_m*ay_m + az_m*az_m);
 
   // ── Raw accel magnitude for ZUPT (|a_raw| ≈ 9.81 means resting) ──
@@ -666,7 +807,12 @@ function stopSensors() {
 }
 
 function resetState() {
-  orientation = Q.identity();
+  orientation  = Q.identity();
+  calibOffset  = Q.identity();
+  isCalibrated = false;
+  document.getElementById('calib-badge').classList.remove('show');
+  document.getElementById('calib-status').textContent = 'No calibration applied';
+  document.getElementById('calib-status').style.color = 'var(--text3)';
   velocity    = [0,0,0];
   position    = [0,0,0];
   zuptCount   = 0; zuptWindow = []; peakVel = 0; peakPos = 0;
@@ -696,6 +842,105 @@ function setFilter(mode, el) {
   el.classList.add('active');
   document.getElementById('stat-filter').textContent = mode;
   Filters.reset();
+}
+
+/* ═══════════════════════════════════════
+   AXIS REMAP
+═══════════════════════════════════════ */
+function applyAxisRemap() {
+  axisRemap.xSrc  = parseInt(document.getElementById('remap-x-src').value);
+  axisRemap.ySrc  = parseInt(document.getElementById('remap-y-src').value);
+  axisRemap.zSrc  = parseInt(document.getElementById('remap-z-src').value);
+  axisRemap.xFlip = document.getElementById('remap-x-flip').checked;
+  axisRemap.yFlip = document.getElementById('remap-y-flip').checked;
+  axisRemap.zFlip = document.getElementById('remap-z-flip').checked;
+  // Reset orientation so new remap starts from identity
+  orientation  = Q.identity();
+  calibOffset  = Q.identity();
+  isCalibrated = false;
+  document.getElementById('calib-badge').classList.remove('show');
+  document.getElementById('calib-status').textContent = 'Axis remap applied — re-calibrate if needed';
+  document.getElementById('calib-status').style.color = 'var(--amber)';
+}
+
+/* ═══════════════════════════════════════
+   POSE CALIBRATION
+═══════════════════════════════════════ */
+function selectPose(name, el) {
+  selectedPose = name;
+  document.querySelectorAll('.pose-btn').forEach(b => b.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+// Quaternion conjugate (inverse for unit quaternions)
+function qConj(q) { return [q[0], -q[1], -q[2], -q[3]]; }
+
+function startCalibration() {
+  if (calibrating) return;
+  const btn = document.getElementById('calib-btn');
+  const progress = document.getElementById('calib-progress');
+  const bar = document.getElementById('calib-bar');
+  const status = document.getElementById('calib-status');
+
+  calibSamples = [];
+  calibrating  = true;
+  btn.disabled = true;
+  progress.style.display = 'block';
+  bar.style.width = '0%';
+  status.textContent = 'Hold still…';
+  status.style.color = 'var(--amber)';
+
+  const DURATION = 2000;  // 2 second average
+  const start = performance.now();
+
+  const tick = setInterval(() => {
+    const elapsed = performance.now() - start;
+    const pct = Math.min(100, (elapsed / DURATION) * 100);
+    bar.style.width = pct + '%';
+
+    if (elapsed >= DURATION) {
+      clearInterval(tick);
+      calibrating = false;
+      btn.disabled = false;
+      progress.style.display = 'none';
+
+      if (calibSamples.length < 5) {
+        status.textContent = '✗ Not enough samples — start sensors first';
+        status.style.color = 'var(--red)';
+        return;
+      }
+
+      // Average the collected quaternions (simple mean then normalize — good enough for small spreads)
+      const avgQ = calibSamples.reduce((acc, q) => {
+        // Ensure consistent hemisphere before averaging
+        const sign = (acc[0]*q[0]+acc[1]*q[1]+acc[2]*q[2]+acc[3]*q[3]) >= 0 ? 1 : -1;
+        return [acc[0]+sign*q[0], acc[1]+sign*q[1], acc[2]+sign*q[2], acc[3]+sign*q[3]];
+      }, [0,0,0,0]);
+      const qMeasured = Q.norm(avgQ);
+
+      // Compute offset: calibOffset = qMeasured^-1 so that q_display = calibOffset ⊗ q_sensor
+      // For 'custom' pose, target = identity (current pose becomes zero)
+      // For other poses, target = known reference quaternion
+      let qTarget;
+      if (selectedPose === 'custom') {
+        qTarget = Q.identity();
+        calibOffset = qConj(qMeasured);
+      } else {
+        qTarget = POSE_TARGETS[selectedPose];
+        // calibOffset maps measured → target: calibOffset = qTarget ⊗ qMeasured^-1
+        calibOffset = Q.norm(Q.mul(qTarget, qConj(qMeasured)));
+      }
+
+      isCalibrated = true;
+      // Apply offset immediately to current orientation
+      orientation = Q.norm(Q.mul(calibOffset, orientation));
+
+      document.getElementById('calib-badge').classList.add('show');
+      const poseNames = { flat:'flat face-up', portrait:'upright portrait', landscape:'landscape', custom:'current pose' };
+      status.textContent = `✓ Calibrated to "${poseNames[selectedPose]}" (${calibSamples.length} samples)`;
+      status.style.color = 'var(--accent)';
+    }
+  }, 50);
 }
 
 /* ═══════════════════════════════════════
@@ -873,16 +1118,17 @@ function uiLoop() {
   // Drift warning
   if (s.pMag > 5) document.getElementById('warn-bar').classList.add('show');
 
-  // ── Orientation ──
-  const [roll,pitch,yaw] = Q.toEuler(orientation);
+  // ── Orientation ── apply calibration offset for display only
+  const qDisplay = isCalibrated ? Q.norm(Q.mul(calibOffset, orientation)) : orientation;
+  const [roll,pitch,yaw] = Q.toEuler(qDisplay);
   document.getElementById('o-roll').textContent  = Math.round(roll)+'°';
   document.getElementById('o-pitch').textContent = Math.round(pitch)+'°';
   document.getElementById('o-yaw').textContent   = Math.round(yaw)+'°';
-  document.getElementById('q-w').textContent = fmt3(orientation[0]);
-  document.getElementById('q-x').textContent = fmt3(orientation[1]);
-  document.getElementById('q-y').textContent = fmt3(orientation[2]);
-  document.getElementById('q-z').textContent = fmt3(orientation[3]);
-  document.getElementById('q-norm').textContent = fmt3(Q.magnitude(orientation));
+  document.getElementById('q-w').textContent = fmt3(qDisplay[0]);
+  document.getElementById('q-x').textContent = fmt3(qDisplay[1]);
+  document.getElementById('q-y').textContent = fmt3(qDisplay[2]);
+  document.getElementById('q-z').textContent = fmt3(qDisplay[3]);
+  document.getElementById('q-norm').textContent = fmt3(Q.magnitude(qDisplay));
 
   // CSS 3D cube — ZYX order matches Android screen-frame Euler convention
   const cube = document.getElementById('phone-cube');
