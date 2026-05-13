@@ -312,8 +312,8 @@
         <div class="info-row"><span class="info-key">Resets triggered</span><span class="info-val" id="zupt-count">0</span></div>
         <div class="slider-row" style="margin-top:8px;">
           <label>Thresh</label>
-          <input type="range" id="zupt-slider" min="0.01" max="0.3" step="0.01" value="0.05" oninput="updateZupt(this.value)"/>
-          <span id="zupt-val">0.05</span>
+          <input type="range" id="zupt-slider" min="0.01" max="0.3" step="0.01" value="0.15" oninput="updateZupt(this.value)"/>
+          <span id="zupt-val">0.15</span>
         </div>
       </div>
     </div>
@@ -498,9 +498,11 @@ let orientation = Q.identity();
 let velocity    = [0, 0, 0];
 let position    = [0, 0, 0];
 let tauMs    = 0.98;
-let zuptThresh = 0.05;
+let zuptThresh = 0.15;
 let filterMode = 'none';
 let zuptCount  = 0;
+const ZUPT_WINDOW = 8;
+let zuptWindow = [];
 let peakVel  = 0, peakPos  = 0;
 let sessionStart = null;
 let totalSamples = 0;
@@ -544,9 +546,13 @@ function onMotion(e) {
   const ax_raw = aig.x || 0;
   const ay_raw = aig.y || 0;
   const az_raw = aig.z || 0;
-  const gx_deg = rr.alpha || 0;
-  const gy_deg = rr.beta  || 0;
-  const gz_deg = rr.gamma || 0;
+  // Android DeviceMotion rotationRate axis mapping:
+  // beta  = rotation around X axis (pitch, tilt forward/back)
+  // gamma = rotation around Y axis (roll, tilt left/right)
+  // alpha = rotation around Z axis (yaw, twist)
+  const gx_deg = rr.beta  || 0;
+  const gy_deg = rr.gamma || 0;
+  const gz_deg = rr.alpha || 0;
   const gx = gx_deg * Math.PI/180;
   const gy = gy_deg * Math.PI/180;
   const gz = gz_deg * Math.PI/180;
@@ -564,27 +570,48 @@ function onMotion(e) {
   orientation = Q.norm(Q.slerp(qAccel, qGyro, alpha));
 
   // ── Gravity removal ──
-  // Rotate gravity world vector [0, 0, GRAVITY] into phone frame
-  const gWorld = [0, 0, GRAVITY];
+  // Gravity in world frame points down = [0, -GRAVITY, 0] in standard NED
+  // Android accelerometer: Z points up from screen, Y toward top, X toward right
+  // When phone flat on table face-up: az ≈ +9.81
+  // Rotate world gravity [0, 0, -GRAVITY] into body frame via quaternion
+  const gWorld = [0, 0, -GRAVITY];
   const gBody  = Q.rotateVec(orientation, gWorld);
   const ax_m   = ax_f - gBody[0];
   const ay_m   = ay_f - gBody[1];
   const az_m   = az_f - gBody[2];
   const aMag   = Math.sqrt(ax_m*ax_m + ay_m*ay_m + az_m*az_m);
 
-  // ── ZUPT ──
-  const isStationary = aMag < zuptThresh;
+  // ── Raw accel magnitude for ZUPT (|a_raw| ≈ 9.81 means resting) ──
+  const aRawMag = Math.sqrt(ax_f*ax_f + ay_f*ay_f + az_f*az_f);
+  const nearGravity = Math.abs(aRawMag - GRAVITY) < 0.5;  // within 0.5 m/s² of 9.81
+
+  // ── ZUPT: rolling window (8 frames) + raw gravity check ──
+  zuptWindow.push(aMag < zuptThresh || nearGravity);
+  if (zuptWindow.length > ZUPT_WINDOW) zuptWindow.shift();
+  const stationaryFrames = zuptWindow.filter(Boolean).length;
+  const isStationary = stationaryFrames >= ZUPT_WINDOW * 0.75;
+
   if (isStationary) {
-    velocity = [0, 0, 0];
+    // Soft decay instead of hard zero — avoids position jump on resume
+    velocity[0] *= 0.85;
+    velocity[1] *= 0.85;
+    velocity[2] *= 0.85;
+    if (Math.abs(velocity[0]) < 0.001) velocity[0] = 0;
+    if (Math.abs(velocity[1]) < 0.001) velocity[1] = 0;
+    if (Math.abs(velocity[2]) < 0.001) velocity[2] = 0;
     zuptCount++;
   } else {
     velocity[0] += ax_m * currentDt;
     velocity[1] += ay_m * currentDt;
     velocity[2] += az_m * currentDt;
   }
-  position[0] += velocity[0] * currentDt;
-  position[1] += velocity[1] * currentDt;
-  position[2] += velocity[2] * currentDt;
+
+  // ── Position: only integrate when not stationary ──
+  if (!isStationary) {
+    position[0] += velocity[0] * currentDt;
+    position[1] += velocity[1] * currentDt;
+    position[2] += velocity[2] * currentDt;
+  }
 
   const vMag = Math.sqrt(velocity[0]**2 + velocity[1]**2 + velocity[2]**2);
   const pMag = Math.sqrt(position[0]**2 + position[1]**2 + position[2]**2);
@@ -642,7 +669,7 @@ function resetState() {
   orientation = Q.identity();
   velocity    = [0,0,0];
   position    = [0,0,0];
-  zuptCount   = 0; peakVel = 0; peakPos = 0;
+  zuptCount   = 0; zuptWindow = []; peakVel = 0; peakPos = 0;
   Store.clear(); trajPoints = [];
   Filters.reset();
   totalSamples = 0;
@@ -857,14 +884,14 @@ function uiLoop() {
   document.getElementById('q-z').textContent = fmt3(orientation[3]);
   document.getElementById('q-norm').textContent = fmt3(Q.magnitude(orientation));
 
-  // CSS 3D cube
+  // CSS 3D cube — ZYX order matches Android screen-frame Euler convention
   const cube = document.getElementById('phone-cube');
-  cube.style.transform = `rotateX(${-pitch}deg) rotateY(${yaw}deg) rotateZ(${roll}deg)`;
+  cube.style.transform = `rotateY(${yaw}deg) rotateX(${pitch}deg) rotateZ(${-roll}deg)`;
 
   // ── Motion / ZUPT ──
-  document.getElementById('zupt-status').textContent = s.isStationary ? '✓ Stationary' : 'Moving';
-  document.getElementById('zupt-status').style.color = s.isStationary ? 'var(--accent)' : 'var(--text1)';
-  document.getElementById('zupt-mag').textContent   = s.aMag.toFixed(4)+' m/s²';
+  document.getElementById('zupt-status').textContent = s.isStationary ? '✓ Stationary' : '↗ Moving';
+  document.getElementById('zupt-status').style.color = s.isStationary ? 'var(--accent)' : 'var(--amber)';
+  document.getElementById('zupt-mag').textContent   = s.aMag.toFixed(4)+' m/s²  (raw|a|='+Math.sqrt(s.ax**2+s.ay**2+s.az**2).toFixed(2)+')';
   document.getElementById('zupt-count').textContent = zuptCount;
 
   // ── Analysis ──
