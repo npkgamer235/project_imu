@@ -103,18 +103,10 @@
   .chart-wrap { position: relative; width: 100%; margin: 0; }
   .chart-wrap canvas { display: block; width: 100% !important; }
 
-  /* ── 3D cube ── */
-  #cube-container { perspective: 300px; display: flex; align-items: center; justify-content: center; height: 160px; margin: 10px 0; }
-  #phone-cube { width: 70px; height: 120px; position: relative; transform-style: preserve-3d; transition: transform 0.05s linear; }
-  .face { position: absolute; border: 1px solid rgba(28, 201, 138, 0.3); }
-  .face.front  { width: 70px; height: 120px; background: rgba(28,201,138,0.08); transform: translateZ(9px); }
-  .face.back   { width: 70px; height: 120px; background: rgba(28,201,138,0.04); transform: rotateY(180deg) translateZ(9px); }
-  .face.right  { width: 18px; height: 120px; background: rgba(74,158,255,0.06); transform: rotateY(90deg) translateZ(61px); }
-  .face.left   { width: 18px; height: 120px; background: rgba(74,158,255,0.06); transform: rotateY(-90deg) translateZ(9px); }
-  .face.top    { width: 70px; height: 18px; background: rgba(255,90,90,0.06); transform: rotateX(90deg) translateZ(111px); }
-  .face.bottom { width: 70px; height: 18px; background: rgba(255,90,90,0.06); transform: rotateX(-90deg) translateZ(9px); }
-  .phone-screen { position: absolute; top: 10px; left: 5px; right: 5px; bottom: 20px; background: rgba(28,201,138,0.15); border-radius: 4px; transform: translateZ(10px); }
-  .phone-btn { position: absolute; bottom: 5px; left: 50%; transform: translateX(-50%) translateZ(10px); width: 16px; height: 16px; border-radius: 50%; border: 1px solid rgba(28,201,138,0.4); }
+  /* ── 3D scene canvas ── */
+  #scene-card { padding: 0; overflow: hidden; border-radius: var(--r); background: #0a0d16; }
+  #scene-canvas { display: block; width: 100%; touch-action: none; }
+  #scene-hint { font-size: 11px; color: var(--text3); text-align: center; padding: 6px 0 8px; letter-spacing: 0.03em; }
 
   /* ── Trajectory canvas ── */
   #traj-wrap { position: relative; margin: 8px 0; }
@@ -271,121 +263,34 @@
     <!-- ══ ORIENTATION ══ -->
     <div class="view" id="view-orient">
 
-      <!-- 3D model -->
-      <div class="section-label">3D phone model</div>
-      <div class="card" style="padding:8px; position:relative;">
-        <div class="calib-badge" id="calib-badge">✓ Calibrated</div>
-        <div id="cube-container">
-          <div id="phone-cube">
-            <div class="face front"><div class="phone-screen"></div><div class="phone-btn"></div></div>
-            <div class="face back"></div>
-            <div class="face right"></div>
-            <div class="face left"></div>
-            <div class="face top"></div>
-            <div class="face bottom"></div>
-          </div>
-        </div>
-        <!-- Axis legend -->
-        <div style="display:flex;justify-content:center;gap:14px;margin-top:4px;font-size:10px;color:var(--text3);">
-          <span style="color:var(--red);">■ X roll</span>
-          <span style="color:var(--purple);">■ Y pitch</span>
-          <span style="color:var(--blue);">■ Z yaw</span>
-        </div>
+      <!-- 3D scene -->
+      <div class="section-label">3D scene</div>
+      <div class="card" id="scene-card">
+        <canvas id="scene-canvas" height="260"></canvas>
+        <div id="scene-hint">Tilt &amp; rotate your phone — model follows</div>
       </div>
 
       <!-- Euler angles -->
-      <div class="section-label">Euler angles (after calibration)</div>
+      <div class="section-label">Euler angles</div>
       <div class="metric-grid">
         <div class="metric roll"><div class="metric-label">Roll</div><div class="metric-value" id="o-roll">0°</div><div class="metric-unit">rotation</div></div>
         <div class="metric pitch"><div class="metric-label">Pitch</div><div class="metric-value" id="o-pitch">0°</div><div class="metric-unit">tilt</div></div>
         <div class="metric yaw"><div class="metric-label">Yaw</div><div class="metric-value" id="o-yaw">0°</div><div class="metric-unit">heading</div></div>
       </div>
 
-      <!-- Gravity direction debug — helps user find their phone's gravity axis -->
-      <div class="section-label">Gravity direction (lay phone flat to check)</div>
-      <div class="card" style="padding:12px;">
-        <div style="font-size:11px;color:var(--text2);margin-bottom:8px;line-height:1.5;">Lay phone <strong style="color:var(--text1)">flat face-up on a table</strong>. The OS handles orientation automatically now — this shows your phone's raw sensor gravity axis, useful only if trajectory directions seem wrong.</div>
-        <div class="metric-grid">
-          <div class="metric ax"><div class="metric-label">Raw X</div><div class="metric-value" id="dbg-ax" style="font-size:16px">—</div><div class="metric-unit">m/s²</div></div>
-          <div class="metric ay"><div class="metric-label">Raw Y</div><div class="metric-value" id="dbg-ay" style="font-size:16px">—</div><div class="metric-unit">m/s²</div></div>
-          <div class="metric az"><div class="metric-label">Raw Z</div><div class="metric-value" id="dbg-az" style="font-size:16px">—</div><div class="metric-unit">m/s²</div></div>
-        </div>
-        <div style="margin-top:8px;font-size:12px;" id="dbg-gravity-hint" style="color:var(--text3);">Start sensors to see values</div>
-      </div>
-
-      <!-- ── STEP 1: AXIS REMAP ── -->
-      <div class="section-label">Step 1 — axis remapping</div>
+      <!-- Calibration -->
+      <div class="section-label">Calibration</div>
       <div class="card">
-        <div style="font-size:11px;color:var(--text2);margin-bottom:10px;line-height:1.5;">
-          Orientation is now driven by the <strong style="color:var(--accent)">OS sensor fusion</strong> — no manual axis mapping needed for the 3D model. The remap below only affects the <strong style="color:var(--text1)">motion integration pipeline</strong> (velocity/position). If your trajectory direction feels wrong on the MOTION tab, adjust here. Otherwise leave defaults.
+        <div style="font-size:11px;color:var(--text2);margin-bottom:12px;line-height:1.6;">
+          Lay your phone <strong style="color:var(--text1)">flat face-up on the table</strong>, then tap Calibrate. The 3D model will snap onto the table surface and all future orientations will be relative to that position.
         </div>
-        <div class="axis-remap-grid">
-          <div class="axis-cell">
-            <div class="axis-cell-label" style="color:var(--red);">Model X (roll)</div>
-            <select class="axis-select" id="remap-x-src">
-              <option value="0">Sensor X</option>
-              <option value="1" selected>Sensor Y</option>
-              <option value="2">Sensor Z</option>
-            </select>
-            <label class="flip-toggle"><input type="checkbox" id="remap-x-flip"/> flip ±</label>
-          </div>
-          <div class="axis-cell">
-            <div class="axis-cell-label" style="color:var(--purple);">Model Y (pitch)</div>
-            <select class="axis-select" id="remap-y-src">
-              <option value="0" selected>Sensor X</option>
-              <option value="1">Sensor Y</option>
-              <option value="2">Sensor Z</option>
-            </select>
-            <label class="flip-toggle"><input type="checkbox" id="remap-y-flip"/> flip ±</label>
-          </div>
-          <div class="axis-cell">
-            <div class="axis-cell-label" style="color:var(--blue);">Model Z (yaw)</div>
-            <select class="axis-select" id="remap-z-src">
-              <option value="0">Sensor X</option>
-              <option value="1">Sensor Y</option>
-              <option value="2" selected>Sensor Z</option>
-            </select>
-            <label class="flip-toggle"><input type="checkbox" id="remap-z-flip"/> flip ±</label>
-          </div>
-        </div>
-        <button class="remap-apply" onclick="applyAxisRemap()">↺ Apply remap + reset orientation</button>
-      </div>
-
-      <!-- ── STEP 2: POSE CALIBRATION ── -->
-      <div class="section-label">Step 2 — pose calibration</div>
-      <div class="card">
-        <div style="font-size:11px;color:var(--text2);margin-bottom:10px;line-height:1.5;">
-          Hold your phone in the position shown, keep it still for 2 seconds, then tap Calibrate. This measures the offset quaternion between sensor zero and your intended reference frame.
-        </div>
-        <div class="calib-pose-grid">
-          <div class="pose-btn selected" id="pose-flat" onclick="selectPose('flat',this)">
-            <span class="pose-icon">📱</span>
-            <div class="pose-label">Flat face-up</div>
-            <div class="pose-desc">Phone lying flat, screen facing ceiling</div>
-          </div>
-          <div class="pose-btn" id="pose-portrait" onclick="selectPose('portrait',this)">
-            <span class="pose-icon">🔲</span>
-            <div class="pose-label">Upright portrait</div>
-            <div class="pose-desc">Phone held vertical, screen facing you</div>
-          </div>
-          <div class="pose-btn" id="pose-landscape" onclick="selectPose('landscape',this)">
-            <span class="pose-icon">▬</span>
-            <div class="pose-label">Landscape left</div>
-            <div class="pose-desc">Phone rotated 90° CCW, screen facing you</div>
-          </div>
-          <div class="pose-btn" id="pose-custom" onclick="selectPose('custom',this)">
-            <span class="pose-icon">✋</span>
-            <div class="pose-label">Current pose</div>
-            <div class="pose-desc">Use current phone orientation as reference zero</div>
-          </div>
-        </div>
-        <button class="calib-btn" id="calib-btn" onclick="startCalibration()">⊙ Calibrate now</button>
+        <button class="calib-btn" id="calib-btn" onclick="startCalibration()">⊙ Calibrate — place on table</button>
         <div class="calib-progress" id="calib-progress"><div class="calib-progress-bar" id="calib-bar"></div></div>
-        <div class="calib-status" id="calib-status" style="color:var(--text3);">No calibration applied</div>
+        <div class="calib-status" id="calib-status" style="color:var(--text3);">Phone floating — calibrate to place on table</div>
       </div>
 
-      <!-- ── Quaternion debug ── -->
-      <div class="section-label">Quaternion (calibrated)</div>
+      <!-- Quaternion debug -->
+      <div class="section-label">Quaternion</div>
       <div class="card">
         <div class="card-title">q = w + xi + yj + zk</div>
         <div class="metric-grid">
@@ -400,7 +305,7 @@
         </div>
       </div>
 
-      <!-- ── Filter gain ── -->
+      <!-- Filter gain -->
       <div class="section-label">Filter gain (τ)</div>
       <div class="card">
         <div class="slider-row">
@@ -834,8 +739,9 @@ function resetState() {
   orientation  = Q.identity();
   calibOffset  = Q.identity();
   isCalibrated = false;
-  document.getElementById('calib-badge').classList.remove('show');
-  document.getElementById('calib-status').textContent = 'No calibration applied';
+  Scene.dispQ = [1,0,0,0];
+  Scene.snapActive = false;
+  document.getElementById('calib-status').textContent = 'Phone floating — calibrate to place on table';
   document.getElementById('calib-status').style.color = 'var(--text3)';
   velocity    = [0,0,0];
   position    = [0,0,0];
@@ -901,30 +807,29 @@ function qConj(q) { return [q[0], -q[1], -q[2], -q[3]]; }
 
 function startCalibration() {
   if (calibrating) return;
-  const btn = document.getElementById('calib-btn');
+  const btn      = document.getElementById('calib-btn');
   const progress = document.getElementById('calib-progress');
-  const bar = document.getElementById('calib-bar');
-  const status = document.getElementById('calib-status');
+  const bar      = document.getElementById('calib-bar');
+  const status   = document.getElementById('calib-status');
 
   calibSamples = [];
   calibrating  = true;
   btn.disabled = true;
   progress.style.display = 'block';
   bar.style.width = '0%';
-  status.textContent = 'Hold still…';
+  status.textContent = 'Hold still… measuring 2s';
   status.style.color = 'var(--amber)';
 
-  const DURATION = 2000;  // 2 second average
+  const DURATION = 2000;
   const start = performance.now();
 
   const tick = setInterval(() => {
     const elapsed = performance.now() - start;
-    const pct = Math.min(100, (elapsed / DURATION) * 100);
-    bar.style.width = pct + '%';
+    bar.style.width = Math.min(100, (elapsed/DURATION)*100) + '%';
 
     if (elapsed >= DURATION) {
       clearInterval(tick);
-      calibrating = false;
+      calibrating  = false;
       btn.disabled = false;
       progress.style.display = 'none';
 
@@ -934,34 +839,24 @@ function startCalibration() {
         return;
       }
 
-      // Average the collected quaternions (simple mean then normalize — good enough for small spreads)
-      const avgQ = calibSamples.reduce((acc, q) => {
-        // Ensure consistent hemisphere before averaging
+      // Average collected quaternions
+      const sumQ = calibSamples.reduce((acc, q) => {
         const sign = (acc[0]*q[0]+acc[1]*q[1]+acc[2]*q[2]+acc[3]*q[3]) >= 0 ? 1 : -1;
         return [acc[0]+sign*q[0], acc[1]+sign*q[1], acc[2]+sign*q[2], acc[3]+sign*q[3]];
       }, [0,0,0,0]);
-      const qMeasured = Q.norm(avgQ);
+      const qMeasured = Q.norm(sumQ);
 
-      // Compute offset: calibOffset = qMeasured^-1 so that q_display = calibOffset ⊗ q_sensor
-      // For 'custom' pose, target = identity (current pose becomes zero)
-      // For other poses, target = known reference quaternion
-      let qTarget;
-      if (selectedPose === 'custom') {
-        qTarget = Q.identity();
-        calibOffset = qConj(qMeasured);
-      } else {
-        qTarget = POSE_TARGETS[selectedPose];
-        // calibOffset maps measured → target: calibOffset = qTarget ⊗ qMeasured^-1
-        calibOffset = Q.norm(Q.mul(qTarget, qConj(qMeasured)));
-      }
-
+      // Target: flat face-up = identity (phone lays flat on table, screen up)
+      // calibOffset maps current sensor reading → identity
+      calibOffset  = qConj(qMeasured);
       isCalibrated = true;
-      // Apply offset immediately to current orientation
-      orientation = Q.norm(Q.mul(calibOffset, orientation));
 
-      document.getElementById('calib-badge').classList.add('show');
-      const poseNames = { flat:'flat face-up', portrait:'upright portrait', landscape:'landscape', custom:'current pose' };
-      status.textContent = `✓ Calibrated to "${poseNames[selectedPose]}" (${calibSamples.length} samples)`;
+      // Trigger snap animation: phone snaps from current display pos → flat-on-table
+      const fromQ = [...Scene.dispQ];
+      const toQ   = Q.identity(); // flat face-up = identity in display frame
+      Scene.triggerSnap(fromQ, toQ);
+
+      status.textContent = `✓ Placed on table (${calibSamples.length} samples)`;
       status.style.color = 'var(--accent)';
     }
   }, 50);
@@ -1044,6 +939,7 @@ function pushData(chart, dsIdx, val) {
 
 let chartAccel, chartVel, chartCompare, chartDrift;
 window.addEventListener('load', () => {
+  Scene.init();
   chartAccel   = makeChart('chart-accel',   'Accel',  ['#ff5a5a','#1fc98a','#4a9eff'], -20, 20);
   chartVel     = makeChart('chart-vel',     'Vel',    ['#ff5a5a','#1fc98a','#4a9eff'], -5, 5);
   chartCompare = makeCompareChart();
@@ -1109,12 +1005,354 @@ function drawTrajectory() {
 }
 
 /* ═══════════════════════════════════════
+   3D SCENE RENDERER
+   Software perspective projection — no libs needed.
+   Coordinate system: X right, Y up, Z toward viewer.
+   Camera looks from above-right at the table.
+═══════════════════════════════════════ */
+const Scene = {
+  // Scene smoothing — interpolate toward target quaternion for buttery motion
+  dispQ: [1,0,0,0],
+
+  // Phone "floating" Y offset when uncalibrated
+  floatOffset: 0,
+  floatPhase: 0,
+
+  // Snap animation state
+  snapActive: false,
+  snapProgress: 0,   // 0→1
+  snapFromQ: [1,0,0,0],
+  snapToQ: [1,0,0,0],
+
+  init() {
+    const canvas = document.getElementById('scene-canvas');
+    if (!canvas) return;
+    // Size canvas to card width at 2x DPR
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.parentElement.clientWidth || 360;
+    canvas.width  = w * dpr;
+    canvas.height = 260 * dpr;
+    canvas.style.width  = w + 'px';
+    canvas.style.height = '260px';
+    this._ctx = canvas.getContext('2d');
+    this._ctx.scale(dpr, dpr);
+    this._W = w;
+    this._H = 260;
+  },
+
+  // Perspective project a 3D point to 2D screen coords
+  project(x, y, z, camDist) {
+    const d = camDist;
+    const scale = d / (d - z);
+    return [ x * scale, y * scale ];
+  },
+
+  // Rotate a vertex [x,y,z] by quaternion q
+  rotV(q, v) { return Q.rotateVec(q, v); },
+
+  // Draw a filled + outlined polygon face
+  drawFace(ctx, pts2d, fill, stroke, alpha) {
+    ctx.globalAlpha = alpha;
+    ctx.beginPath();
+    ctx.moveTo(pts2d[0][0], pts2d[0][1]);
+    for (let i=1;i<pts2d.length;i++) ctx.lineTo(pts2d[i][0], pts2d[i][1]);
+    ctx.closePath();
+    ctx.fillStyle = fill;   ctx.fill();
+    ctx.strokeStyle = stroke; ctx.lineWidth = 0.8; ctx.stroke();
+    ctx.globalAlpha = 1;
+  },
+
+  draw(targetQ) {
+    if (!this._ctx) this.init();
+    const ctx = this._ctx;
+    const W = this._W, H = this._H;
+    ctx.clearRect(0, 0, W, H);
+
+    // ── Smooth display quaternion toward target ──
+    this.dispQ = Q.slerp(this.dispQ, targetQ, 0.12);
+
+    // ── Snap animation ──
+    if (this.snapActive) {
+      this.snapProgress = Math.min(1, this.snapProgress + 0.045);
+      const ease = 1 - Math.pow(1 - this.snapProgress, 3);
+      this.dispQ = Q.slerp(this.snapFromQ, this.snapToQ, ease);
+      if (this.snapProgress >= 1) { this.snapActive = false; this.dispQ = this.snapToQ; }
+    }
+
+    // ── Float bob (uncalibrated) ──
+    this.floatPhase += 0.04;
+    const floatY = isCalibrated ? 0 : Math.sin(this.floatPhase) * 6 + 8;
+
+    // Scene camera setup — fixed isometric-ish view
+    const cx = W / 2;
+    const cy = H * 0.52;
+    const CAM = 520;   // perspective distance
+    const SCALE = 90;  // world units → pixels
+
+    // Helper: world→screen
+    const ws = (x,y,z) => {
+      // Camera tilted: rotate world point by fixed camera quaternion
+      // Camera looks from (0.5, 0.7, 1) direction
+      const camTiltX = -0.42;  // radians tilt down
+      const camTiltY =  0.35;  // radians rotate left
+      // Simple manual rotation: Ry then Rx
+      const cy1 = Math.cos(camTiltY), sy1 = Math.sin(camTiltY);
+      const cx1 = Math.cos(camTiltX), sx1 = Math.sin(camTiltX);
+      let x1 =  x*cy1 + z*sy1;
+      let z1 = -x*sy1 + z*cy1;
+      let y1 =  y;
+      let y2 =  y1*cx1 - z1*sx1;
+      let z2 =  y1*sx1 + z1*cx1;
+      let x2 =  x1;
+      // Perspective
+      const d = CAM;
+      const sc = d / (d + z2 * SCALE);
+      return [cx + x2 * SCALE * sc, cy - y2 * SCALE * sc];
+    };
+
+    // ══ BACKGROUND gradient ══
+    const bg = ctx.createRadialGradient(cx, cy+20, 10, cx, cy+20, 260);
+    bg.addColorStop(0, '#141926');
+    bg.addColorStop(1, '#0a0d16');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
+
+    // ══ TABLE ══
+    // Table surface: a flat rectangle in XZ plane at Y=0
+    const TW = 1.6, TH = 0.015, TD = 1.1;
+    const TLX = -TW/2, TRX = TW/2, TFZ = TD/2, TBZ = -TD/2;
+    const TY0 = 0, TY1 = -TH;
+
+    // Table top surface
+    const topFace = [
+      ws(TLX, TY0, TFZ), ws(TRX, TY0, TFZ),
+      ws(TRX, TY0, TBZ), ws(TLX, TY0, TBZ)
+    ];
+    this.drawFace(ctx, topFace, '#1a2235', '#2a3a55', 0.9);
+
+    // Table grid lines on top
+    ctx.globalAlpha = 0.18;
+    ctx.strokeStyle = '#4a9eff';
+    ctx.lineWidth = 0.5;
+    for (let xi=-3; xi<=3; xi++) {
+      const xv = xi * (TW/6);
+      if (Math.abs(xv) > TW/2) continue;
+      const p1 = ws(xv, TY0+0.001, TFZ), p2 = ws(xv, TY0+0.001, TBZ);
+      ctx.beginPath(); ctx.moveTo(p1[0],p1[1]); ctx.lineTo(p2[0],p2[1]); ctx.stroke();
+    }
+    for (let zi=-3; zi<=3; zi++) {
+      const zv = zi * (TD/6);
+      if (Math.abs(zv) > TD/2) continue;
+      const p1 = ws(TLX, TY0+0.001, zv), p2 = ws(TRX, TY0+0.001, zv);
+      ctx.beginPath(); ctx.moveTo(p1[0],p1[1]); ctx.lineTo(p2[0],p2[1]); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
+    // Table front face
+    const frontFace = [
+      ws(TLX, TY0, TFZ), ws(TRX, TY0, TFZ),
+      ws(TRX, TY1, TFZ), ws(TLX, TY1, TFZ)
+    ];
+    this.drawFace(ctx, frontFace, '#111827', '#1e2d47', 0.85);
+
+    // Table right face
+    const rightFace = [
+      ws(TRX, TY0, TFZ), ws(TRX, TY0, TBZ),
+      ws(TRX, TY1, TBZ), ws(TRX, TY1, TFZ)
+    ];
+    this.drawFace(ctx, rightFace, '#0e1520', '#1a2540', 0.85);
+
+    // Table legs
+    const legH = 0.55;
+    const legR = 0.04;
+    const legPos = [
+      [TLX+0.12, TBZ+0.1], [TRX-0.12, TBZ+0.1],
+      [TLX+0.12, TFZ-0.1], [TRX-0.12, TFZ-0.1]
+    ];
+    legPos.forEach(([lx,lz]) => {
+      const lt = ws(lx, TY1, lz);
+      const lb = ws(lx, TY1-legH, lz);
+      ctx.globalAlpha = 0.6;
+      ctx.strokeStyle = '#1e2d47';
+      ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(lt[0],lt[1]); ctx.lineTo(lb[0],lb[1]); ctx.stroke();
+      ctx.globalAlpha = 1;
+    });
+
+    // ══ PHONE SHADOW on table ══
+    const shadowAlpha = isCalibrated ? 0.35 : Math.max(0, 0.15 - floatY * 0.01);
+    if (shadowAlpha > 0.02) {
+      // Shadow is phone footprint projected flat onto table top at Y=0
+      const PW=0.38, PH=0.72, PT=0.04;
+      const corners = [[-PW/2,-PH/2,0],[PW/2,-PH/2,0],[PW/2,PH/2,0],[-PW/2,PH/2,0]];
+      // Rotate corners by display quaternion (shadow uses only XZ, ignores height)
+      const shadowPts = corners.map(v => {
+        const rv = this.rotV(this.dispQ, v);
+        return ws(rv[0], TY0+0.002, rv[2]);
+      });
+      ctx.globalAlpha = shadowAlpha;
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.moveTo(shadowPts[0][0], shadowPts[0][1]);
+      shadowPts.forEach(p => ctx.lineTo(p[0],p[1]));
+      ctx.closePath(); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
+    // ══ PHONE MODEL ══
+    // Phone dimensions (world units): width, height, thickness
+    const PW=0.38, PH=0.72, PT=0.04;
+    // Y offset: on table (calibrated) = PT/2, floating = PT/2 + floatY/SCALE
+    const phoneY = isCalibrated ? PT/2 : PT/2 + floatY/SCALE;
+
+    // 8 corners of phone box in local space (centered at origin)
+    const localCorners = [
+      [-PW/2, -PH/2, -PT/2], [ PW/2, -PH/2, -PT/2],
+      [ PW/2,  PH/2, -PT/2], [-PW/2,  PH/2, -PT/2],
+      [-PW/2, -PH/2,  PT/2], [ PW/2, -PH/2,  PT/2],
+      [ PW/2,  PH/2,  PT/2], [-PW/2,  PH/2,  PT/2]
+    ];
+
+    // Rotate all corners by display quaternion then translate to phoneY
+    const wc = localCorners.map(v => {
+      const rv = this.rotV(this.dispQ, v);
+      return ws(rv[0], rv[1]+phoneY, rv[2]);
+    });
+
+    // 6 faces: [indices, baseColor, edgeColor, label]
+    // Faces defined in CCW winding from outside
+    const faces = [
+      { idx:[4,5,6,7], col:'#1a3a2a', edge:'#1fc98a', label:'screen' }, // front (+Z)
+      { idx:[1,0,3,2], col:'#0e1f17', edge:'#0a6644', label:null   }, // back  (-Z)
+      { idx:[5,1,2,6], col:'#112a1e', edge:'#0d7a50', label:null   }, // right (+X)
+      { idx:[0,4,7,3], col:'#0d2218', edge:'#0a6644', label:null   }, // left  (-X)
+      { idx:[7,6,2,3], col:'#163323', edge:'#17a872', label:'top'  }, // top   (+Y)
+      { idx:[0,1,5,4], col:'#0c1a14', edge:'#085041', label:null   }, // bot   (-Y)
+    ];
+
+    // Compute face normals for back-face culling + lighting
+    const camDir = [0.5, 0.7, 1.0]; // approx camera direction
+    const camMag = Math.sqrt(camDir[0]**2+camDir[1]**2+camDir[2]**2);
+    camDir[0]/=camMag; camDir[1]/=camMag; camDir[2]/=camMag;
+
+    const faceNormals = [
+      [0,0,1],[0,0,-1],[1,0,0],[-1,0,0],[0,1,0],[0,-1,0]
+    ];
+
+    // Sort faces by depth (painter's algorithm)
+    const facesWithDepth = faces.map((f,i) => {
+      const rn = this.rotV(this.dispQ, faceNormals[i]);
+      const dot = rn[0]*camDir[0]+rn[1]*camDir[1]+rn[2]*camDir[2];
+      const centerLocal = faceNormals[i].map(v=>v*0.3);
+      const rc = this.rotV(this.dispQ, centerLocal);
+      // depth = distance from camera (approx by z component)
+      return { ...f, dot, depth: rc[2] };
+    }).sort((a,b) => a.depth - b.depth);
+
+    facesWithDepth.forEach(f => {
+      if (f.dot <= 0) return; // back-face cull
+      const pts = f.idx.map(i => wc[i]);
+      const light = 0.4 + 0.6 * Math.max(0, f.dot);
+      // Parse hex and lighten by light factor
+      const base = f.col;
+      ctx.globalAlpha = 0.92;
+      this.drawFace(ctx, pts, base, f.edge, 1);
+
+      // Screen face: draw screen content
+      if (f.label === 'screen') {
+        // Draw screen rect
+        const sm = 0.04; // margin
+        const screenCorners = [
+          [-PW/2+sm, -PH/2+sm, PT/2+0.001],
+          [ PW/2-sm, -PH/2+sm, PT/2+0.001],
+          [ PW/2-sm,  PH/2-sm*2.5, PT/2+0.001],
+          [-PW/2+sm,  PH/2-sm*2.5, PT/2+0.001],
+        ].map(v => { const rv=this.rotV(this.dispQ,v); return ws(rv[0],rv[1]+phoneY,rv[2]); });
+        ctx.globalAlpha = 0.9;
+        this.drawFace(ctx, screenCorners, '#0d2a1e', '#1fc98a44', 1);
+        // IMU Nav label on screen
+        const sc = screenCorners;
+        const midX = (sc[0][0]+sc[1][0]+sc[2][0]+sc[3][0])/4;
+        const midY = (sc[0][1]+sc[1][1]+sc[2][1]+sc[3][1])/4;
+        ctx.globalAlpha = 0.7;
+        ctx.fillStyle = '#1fc98a';
+        ctx.font = 'bold 7px system-ui';
+        ctx.textAlign = 'center';
+        ctx.fillText('IMU NAV', midX, midY+2);
+        ctx.textAlign = 'left';
+
+        // Home button
+        const btnCenter = [-0, -PH/2+0.055, PT/2+0.001];
+        const rb = this.rotV(this.dispQ, btnCenter);
+        const [bx,by] = ws(rb[0],rb[1]+phoneY,rb[2]);
+        ctx.globalAlpha = 0.8;
+        ctx.strokeStyle = '#1fc98a';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(bx,by,4,0,Math.PI*2); ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+    });
+    ctx.globalAlpha = 1;
+
+    // ══ CALIBRATION INDICATOR ══
+    if (isCalibrated) {
+      // Draw a green glow ring around phone footprint on table
+      const tableCenter = ws(0, TY0+0.003, 0);
+      const grad = ctx.createRadialGradient(tableCenter[0],tableCenter[1],5, tableCenter[0],tableCenter[1],45);
+      grad.addColorStop(0, 'rgba(31,201,138,0.18)');
+      grad.addColorStop(1, 'rgba(31,201,138,0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath(); ctx.arc(tableCenter[0],tableCenter[1],45,0,Math.PI*2); ctx.fill();
+      // "✓ calibrated" label
+      ctx.font = 'bold 10px system-ui';
+      ctx.fillStyle = '#1fc98a';
+      ctx.textAlign = 'center';
+      ctx.fillText('✓ calibrated', tableCenter[0], tableCenter[1]+35);
+      ctx.textAlign = 'left';
+    } else {
+      // Float indicator: vertical dotted line from phone to table
+      const phoneTop = ws(0, phoneY, 0);
+      const tableTop = ws(0, TY0+0.002, 0);
+      ctx.globalAlpha = 0.3;
+      ctx.strokeStyle = '#f5a623';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3,4]);
+      ctx.beginPath(); ctx.moveTo(phoneTop[0],phoneTop[1]); ctx.lineTo(tableTop[0],tableTop[1]); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+      // "floating" label
+      ctx.font = '10px system-ui';
+      ctx.fillStyle = '#f5a623';
+      ctx.textAlign = 'center';
+      ctx.fillText('floating — calibrate to place on table', W/2, H-8);
+      ctx.textAlign = 'left';
+    }
+  },
+
+  triggerSnap(fromQ, toQ) {
+    this.snapFromQ = [...fromQ];
+    this.snapToQ = [...toQ];
+    this.snapProgress = 0;
+    this.snapActive = true;
+  }
+};
+
+function drawScene(q) {
+  Scene.draw(q);
+}
+
+/* ═══════════════════════════════════════
    UI UPDATE LOOP (60fps)
 ═══════════════════════════════════════ */
 let frameCount = 0;
 function uiLoop() {
   requestAnimationFrame(uiLoop);
   frameCount++;
+
+  // Always draw scene (even before sensors start)
+  const qD = isCalibrated ? Q.norm(Q.mul(calibOffset, orientation)) : orientation;
+  drawScene(qD);
+
   const s = Store.getLatest();
   if (!s) return;
 
@@ -1142,21 +1380,6 @@ function uiLoop() {
   // Drift warning
   if (s.pMag > 5) document.getElementById('warn-bar').classList.add('show');
 
-  // ── Gravity direction debug ──
-  const dbgAx = s.ax.toFixed(2), dbgAy = s.ay.toFixed(2), dbgAz = s.az.toFixed(2);
-  document.getElementById('dbg-ax').textContent = dbgAx;
-  document.getElementById('dbg-ay').textContent = dbgAy;
-  document.getElementById('dbg-az').textContent = dbgAz;
-  const absx = Math.abs(s.ax), absy = Math.abs(s.ay), absz = Math.abs(s.az);
-  const gravAxis = absx > absy && absx > absz ? 'X' : absy > absz ? 'Y' : 'Z';
-  const gravSign = (gravAxis==='X'?s.ax:gravAxis==='Y'?s.ay:s.az) > 0 ? '+' : '−';
-  const gravHint = document.getElementById('dbg-gravity-hint');
-  const gravOk = Math.max(absx,absy,absz) > 8.5;
-  gravHint.textContent = gravOk
-    ? `Gravity axis detected: ${gravSign}${gravAxis} ≈ ${Math.max(absx,absy,absz).toFixed(2)} m/s² — set Model Z (yaw) remap → Sensor ${gravAxis}`
-    : 'Lay phone flat face-up for gravity axis detection';
-  gravHint.style.color = gravOk ? 'var(--accent)' : 'var(--text3)';
-
   // ── Orientation ── apply calibration offset for display only
   const qDisplay = isCalibrated ? Q.norm(Q.mul(calibOffset, orientation)) : orientation;
   const [roll,pitch,yaw] = Q.toEuler(qDisplay);
@@ -1169,9 +1392,8 @@ function uiLoop() {
   document.getElementById('q-z').textContent = fmt3(qDisplay[3]);
   document.getElementById('q-norm').textContent = fmt3(Q.magnitude(qDisplay));
 
-  // CSS 3D cube — ZYX order matches Android screen-frame Euler convention
-  const cube = document.getElementById('phone-cube');
-  cube.style.transform = `rotateY(${yaw}deg) rotateX(${pitch}deg) rotateZ(${-roll}deg)`;
+  // ── 3D scene (every frame) ──
+  drawScene(qDisplay);
 
   // ── Motion / ZUPT ──
   document.getElementById('zupt-status').textContent = s.isStationary ? '✓ Stationary' : '↗ Moving';
