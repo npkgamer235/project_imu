@@ -301,6 +301,18 @@
         <div class="metric yaw"><div class="metric-label">Yaw</div><div class="metric-value" id="o-yaw">0°</div><div class="metric-unit">heading</div></div>
       </div>
 
+      <!-- Gravity direction debug — helps user find their phone's gravity axis -->
+      <div class="section-label">Gravity direction (lay phone flat to check)</div>
+      <div class="card" style="padding:12px;">
+        <div style="font-size:11px;color:var(--text2);margin-bottom:8px;line-height:1.5;">Lay phone <strong style="color:var(--text1)">flat face-up on a table</strong>. One axis should read ≈ ±9.81. That axis is your gravity axis — make sure Model Z (yaw) maps to it.</div>
+        <div class="metric-grid">
+          <div class="metric ax"><div class="metric-label">Raw X</div><div class="metric-value" id="dbg-ax" style="font-size:16px">—</div><div class="metric-unit">m/s²</div></div>
+          <div class="metric ay"><div class="metric-label">Raw Y</div><div class="metric-value" id="dbg-ay" style="font-size:16px">—</div><div class="metric-unit">m/s²</div></div>
+          <div class="metric az"><div class="metric-label">Raw Z</div><div class="metric-value" id="dbg-az" style="font-size:16px">—</div><div class="metric-unit">m/s²</div></div>
+        </div>
+        <div style="margin-top:8px;font-size:12px;" id="dbg-gravity-hint" style="color:var(--text3);">Start sensors to see values</div>
+      </div>
+
       <!-- ── STEP 1: AXIS REMAP ── -->
       <div class="section-label">Step 1 — axis remapping</div>
       <div class="card">
@@ -393,8 +405,8 @@
       <div class="card">
         <div class="slider-row">
           <label>τ (s)</label>
-          <input type="range" id="tau-slider" min="0.1" max="5" step="0.1" value="0.98" oninput="updateTau(this.value)"/>
-          <span id="tau-val">0.98</span>
+          <input type="range" id="tau-slider" min="0.1" max="5" step="0.1" value="0.5" oninput="updateTau(this.value)"/>
+          <span id="tau-val">0.50</span>
         </div>
         <div style="font-size:11px;color:var(--text3);margin-top:4px;">Higher τ → more gyro trust. Lower τ → more accel correction.</div>
       </div>
@@ -495,23 +507,26 @@ const Q = {
     const dq = [1, gx*halfDt, gy*halfDt, gz*halfDt];
     return Q.norm(Q.mul(q, dq));
   },
-  // From accelerometer measurement, compute correction quaternion
-  // Expected gravity in body frame: rotate world [0,0,1] by q^-1
+  // From accelerometer measurement, compute correction quaternion.
+  // Android convention: screen faces +Z, so gravity = +Z ≈ [0,0,+9.81] when flat face-up.
+  // Expected gravity direction in body frame = third column of rotation matrix from q:
+  //   [2(xz+wy),  2(yz-wx),  w²-x²-y²+z²]  ← this is what the sensor should read (normalised)
   accelCorrection(q, ax, ay, az) {
     const amag = Math.sqrt(ax*ax+ay*ay+az*az);
-    if (amag < 0.1) return q;
+    // Only correct when accel is close to 1g (not during strong motion)
+    if (amag < 7.0 || amag > 12.5) return q;
     const nx = ax/amag, ny = ay/amag, nz = az/amag;
-    // Expected gravity direction from current quaternion
+    // Expected gravity unit vector in body frame (Android: +Z column of rotation matrix)
     const [w,x,y,z] = q;
-    const ex = 2*(x*z - w*y);
-    const ey = 2*(w*x + y*z);
+    const ex = 2*(x*z + w*y);
+    const ey = 2*(y*z - w*x);
     const ez = w*w - x*x - y*y + z*z;
-    // Cross product = error
+    // Cross product between measured and expected = rotation error
     const errX = ny*ez - nz*ey;
     const errY = nz*ex - nx*ez;
     const errZ = nx*ey - ny*ex;
-    // Small rotation quaternion from error
-    const gain = 0.1;
+    // Small correction — gain 0.025 is gentle enough not to fight the gyro
+    const gain = 0.025;
     return Q.norm(Q.mul(q, [1, errX*gain, errY*gain, errZ*gain]));
   },
   // SLERP between two quaternions
@@ -609,7 +624,7 @@ let running = false;
 let orientation = Q.identity();
 let velocity    = [0, 0, 0];
 let position    = [0, 0, 0];
-let tauMs    = 0.98;
+let tauMs    = 0.5;
 let zuptThresh = 0.15;
 let filterMode = 'none';
 let zuptCount  = 0;
@@ -679,22 +694,27 @@ function onMotion(e) {
   const ax_raw = aig.x || 0;
   const ay_raw = aig.y || 0;
   const az_raw = aig.z || 0;
-  // Android DeviceMotion rotationRate axis mapping:
-  // beta  = rotation around X axis (pitch, tilt forward/back)
-  // gamma = rotation around Y axis (roll, tilt left/right)
-  // alpha = rotation around Z axis (yaw, twist)
-  const gx_deg = rr.beta  || 0;
-  const gy_deg = rr.gamma || 0;
-  const gz_deg = rr.alpha || 0;
-  const gx = gx_deg * Math.PI/180;
-  const gy = gy_deg * Math.PI/180;
-  const gz = gz_deg * Math.PI/180;
 
-  // ── Apply axis remap to gyro ──
-  const gyroRaw = [gx, gy, gz];
-  const gxR = (axisRemap.xFlip ? -1 : 1) * gyroRaw[axisRemap.xSrc];
-  const gyR = (axisRemap.yFlip ? -1 : 1) * gyroRaw[axisRemap.ySrc];
-  const gzR = (axisRemap.zFlip ? -1 : 1) * gyroRaw[axisRemap.zSrc];
+  // Android rotationRate (deg/s):
+  //   beta  = tilt forward/back  → rotation around screen-X axis
+  //   gamma = tilt left/right    → rotation around screen-Y axis
+  //   alpha = twist (yaw)        → rotation around screen-Z axis
+  // Store as raw array [beta, gamma, alpha] = [gx, gy, gz] in sensor frame
+  const gyroSensor = [
+    (rr.beta  || 0) * Math.PI/180,
+    (rr.gamma || 0) * Math.PI/180,
+    (rr.alpha || 0) * Math.PI/180
+  ];
+
+  // ── Apply axis remap to gyro (once, on raw sensor values) ──
+  const gxR = (axisRemap.xFlip ? -1 : 1) * gyroSensor[axisRemap.xSrc];
+  const gyR = (axisRemap.yFlip ? -1 : 1) * gyroSensor[axisRemap.ySrc];
+  const gzR = (axisRemap.zFlip ? -1 : 1) * gyroSensor[axisRemap.zSrc];
+
+  // Keep deg/s versions for display
+  const gx_deg = (rr.beta  || 0);
+  const gy_deg = (rr.gamma || 0);
+  const gz_deg = (rr.alpha || 0);
 
   // ── Filter raw acceleration ──
   const [ax_f, ay_f, az_f] = Filters.apply(filterMode, ax_raw, ay_raw, az_raw);
@@ -714,8 +734,11 @@ function onMotion(e) {
   let qAccel = Q.accelCorrection(orientation, ax_r, ay_r, az_r);
   orientation = Q.norm(Q.slerp(qAccel, qGyro, alpha));
 
-  // ── Gravity removal (using remapped axes) ──
-  const gWorld = [0, 0, -GRAVITY];
+  // ── Gravity removal ──
+  // Android: screen faces +Z. When flat face-up, az ≈ +9.81 (sensor reads reaction to gravity).
+  // World gravity vector in sensor frame = [0, 0, +GRAVITY].
+  // Rotate it into current body frame using the orientation quaternion.
+  const gWorld = [0, 0, GRAVITY];
   const gBody  = Q.rotateVec(orientation, gWorld);
   const ax_m   = ax_r - gBody[0];
   const ay_m   = ay_r - gBody[1];
@@ -1117,6 +1140,21 @@ function uiLoop() {
 
   // Drift warning
   if (s.pMag > 5) document.getElementById('warn-bar').classList.add('show');
+
+  // ── Gravity direction debug ──
+  const dbgAx = s.ax.toFixed(2), dbgAy = s.ay.toFixed(2), dbgAz = s.az.toFixed(2);
+  document.getElementById('dbg-ax').textContent = dbgAx;
+  document.getElementById('dbg-ay').textContent = dbgAy;
+  document.getElementById('dbg-az').textContent = dbgAz;
+  const absx = Math.abs(s.ax), absy = Math.abs(s.ay), absz = Math.abs(s.az);
+  const gravAxis = absx > absy && absx > absz ? 'X' : absy > absz ? 'Y' : 'Z';
+  const gravSign = (gravAxis==='X'?s.ax:gravAxis==='Y'?s.ay:s.az) > 0 ? '+' : '−';
+  const gravHint = document.getElementById('dbg-gravity-hint');
+  const gravOk = Math.max(absx,absy,absz) > 8.5;
+  gravHint.textContent = gravOk
+    ? `Gravity axis detected: ${gravSign}${gravAxis} ≈ ${Math.max(absx,absy,absz).toFixed(2)} m/s² — set Model Z (yaw) remap → Sensor ${gravAxis}`
+    : 'Lay phone flat face-up for gravity axis detection';
+  gravHint.style.color = gravOk ? 'var(--accent)' : 'var(--text3)';
 
   // ── Orientation ── apply calibration offset for display only
   const qDisplay = isCalibrated ? Q.norm(Q.mul(calibOffset, orientation)) : orientation;
