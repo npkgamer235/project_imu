@@ -304,7 +304,7 @@
       <!-- Gravity direction debug — helps user find their phone's gravity axis -->
       <div class="section-label">Gravity direction (lay phone flat to check)</div>
       <div class="card" style="padding:12px;">
-        <div style="font-size:11px;color:var(--text2);margin-bottom:8px;line-height:1.5;">Lay phone <strong style="color:var(--text1)">flat face-up on a table</strong>. One axis should read ≈ ±9.81. That axis is your gravity axis — make sure Model Z (yaw) maps to it.</div>
+        <div style="font-size:11px;color:var(--text2);margin-bottom:8px;line-height:1.5;">Lay phone <strong style="color:var(--text1)">flat face-up on a table</strong>. The OS handles orientation automatically now — this shows your phone's raw sensor gravity axis, useful only if trajectory directions seem wrong.</div>
         <div class="metric-grid">
           <div class="metric ax"><div class="metric-label">Raw X</div><div class="metric-value" id="dbg-ax" style="font-size:16px">—</div><div class="metric-unit">m/s²</div></div>
           <div class="metric ay"><div class="metric-label">Raw Y</div><div class="metric-value" id="dbg-ay" style="font-size:16px">—</div><div class="metric-unit">m/s²</div></div>
@@ -317,7 +317,7 @@
       <div class="section-label">Step 1 — axis remapping</div>
       <div class="card">
         <div style="font-size:11px;color:var(--text2);margin-bottom:10px;line-height:1.5;">
-          Map each <strong style="color:var(--text1)">model axis</strong> to which <strong style="color:var(--text1)">sensor axis</strong> actually moves it. If tilting your phone forward doesn't move the expected model axis, swap here. Flip ± if the direction is inverted.
+          Orientation is now driven by the <strong style="color:var(--accent)">OS sensor fusion</strong> — no manual axis mapping needed for the 3D model. The remap below only affects the <strong style="color:var(--text1)">motion integration pipeline</strong> (velocity/position). If your trajectory direction feels wrong on the MOTION tab, adjust here. Otherwise leave defaults.
         </div>
         <div class="axis-remap-grid">
           <div class="axis-cell">
@@ -685,7 +685,7 @@ function onMotion(e) {
   if (!running) return;
 
   // ── Δt ──
-  const dtRaw = (e.interval || 0) / 1000;    // event.interval is in ms
+  const dtRaw = (e.interval || 0) / 1000;
   currentDt = (dtRaw > 0 && dtRaw < 0.5) ? dtRaw : 0.016;
 
   // ── Raw sensor values ──
@@ -695,23 +695,6 @@ function onMotion(e) {
   const ay_raw = aig.y || 0;
   const az_raw = aig.z || 0;
 
-  // Android rotationRate (deg/s):
-  //   beta  = tilt forward/back  → rotation around screen-X axis
-  //   gamma = tilt left/right    → rotation around screen-Y axis
-  //   alpha = twist (yaw)        → rotation around screen-Z axis
-  // Store as raw array [beta, gamma, alpha] = [gx, gy, gz] in sensor frame
-  const gyroSensor = [
-    (rr.beta  || 0) * Math.PI/180,
-    (rr.gamma || 0) * Math.PI/180,
-    (rr.alpha || 0) * Math.PI/180
-  ];
-
-  // ── Apply axis remap to gyro (once, on raw sensor values) ──
-  const gxR = (axisRemap.xFlip ? -1 : 1) * gyroSensor[axisRemap.xSrc];
-  const gyR = (axisRemap.yFlip ? -1 : 1) * gyroSensor[axisRemap.ySrc];
-  const gzR = (axisRemap.zFlip ? -1 : 1) * gyroSensor[axisRemap.zSrc];
-
-  // Keep deg/s versions for display
   const gx_deg = (rr.beta  || 0);
   const gy_deg = (rr.gamma || 0);
   const gz_deg = (rr.alpha || 0);
@@ -719,35 +702,28 @@ function onMotion(e) {
   // ── Filter raw acceleration ──
   const [ax_f, ay_f, az_f] = Filters.apply(filterMode, ax_raw, ay_raw, az_raw);
 
-  // ── Apply axis remap to filtered accel ──
-  const accelArr = [ax_f, ay_f, az_f];
-  const ax_r = (axisRemap.xFlip ? -1 : 1) * accelArr[axisRemap.xSrc];
-  const ay_r = (axisRemap.yFlip ? -1 : 1) * accelArr[axisRemap.ySrc];
-  const az_r = (axisRemap.zFlip ? -1 : 1) * accelArr[axisRemap.zSrc];
+  // ── Orientation: use OS quaternion (set by DeviceOrientationEvent handler) ──
+  // orientation is updated in onOrientation() below — no manual filter needed.
 
   // ── Collect calibration samples if in progress ──
   if (calibrating) calibSamples.push([...orientation]);
 
-  // ── Orientation update (complementary filter) ──
-  const alpha = tauMs / (tauMs + currentDt);
-  let qGyro  = Q.integrateGyro(orientation, gxR, gyR, gzR, currentDt);
-  let qAccel = Q.accelCorrection(orientation, ax_r, ay_r, az_r);
-  orientation = Q.norm(Q.slerp(qAccel, qGyro, alpha));
+  // ── Gravity removal using OS orientation ──
+  // DeviceOrientationEvent uses NED (North-East-Down) world frame.
+  // In that frame, gravity points DOWN = [0, 0, +g] in NED = [0, 0, -g] in ENU.
+  // The OS quaternion rotates world→body. To get gravity in body frame:
+  // g_body = q_conj ⊗ [0,0,0,g] ⊗ q   (passive rotation)
+  // Simpler: use rotateVec with conjugate
+  const qC = [orientation[0], -orientation[1], -orientation[2], -orientation[3]];
+  const gBody = Q.rotateVec(qC, [0, 0, GRAVITY]);
+  const ax_m = ax_f - gBody[0];
+  const ay_m = ay_f - gBody[1];
+  const az_m = az_f - gBody[2];
+  const aMag = Math.sqrt(ax_m*ax_m + ay_m*ay_m + az_m*az_m);
 
-  // ── Gravity removal ──
-  // Android: screen faces +Z. When flat face-up, az ≈ +9.81 (sensor reads reaction to gravity).
-  // World gravity vector in sensor frame = [0, 0, +GRAVITY].
-  // Rotate it into current body frame using the orientation quaternion.
-  const gWorld = [0, 0, GRAVITY];
-  const gBody  = Q.rotateVec(orientation, gWorld);
-  const ax_m   = ax_r - gBody[0];
-  const ay_m   = ay_r - gBody[1];
-  const az_m   = az_r - gBody[2];
-  const aMag   = Math.sqrt(ax_m*ax_m + ay_m*ay_m + az_m*az_m);
-
-  // ── Raw accel magnitude for ZUPT (|a_raw| ≈ 9.81 means resting) ──
+  // ── Raw accel magnitude for ZUPT ──
   const aRawMag = Math.sqrt(ax_f*ax_f + ay_f*ay_f + az_f*az_f);
-  const nearGravity = Math.abs(aRawMag - GRAVITY) < 0.5;  // within 0.5 m/s² of 9.81
+  const nearGravity = Math.abs(aRawMag - GRAVITY) < 0.5;
 
   // ── ZUPT: rolling window (8 frames) + raw gravity check ──
   zuptWindow.push(aMag < zuptThresh || nearGravity);
@@ -756,10 +732,7 @@ function onMotion(e) {
   const isStationary = stationaryFrames >= ZUPT_WINDOW * 0.75;
 
   if (isStationary) {
-    // Soft decay instead of hard zero — avoids position jump on resume
-    velocity[0] *= 0.85;
-    velocity[1] *= 0.85;
-    velocity[2] *= 0.85;
+    velocity[0] *= 0.85; velocity[1] *= 0.85; velocity[2] *= 0.85;
     if (Math.abs(velocity[0]) < 0.001) velocity[0] = 0;
     if (Math.abs(velocity[1]) < 0.001) velocity[1] = 0;
     if (Math.abs(velocity[2]) < 0.001) velocity[2] = 0;
@@ -770,7 +743,6 @@ function onMotion(e) {
     velocity[2] += az_m * currentDt;
   }
 
-  // ── Position: only integrate when not stationary ──
   if (!isStationary) {
     position[0] += velocity[0] * currentDt;
     position[1] += velocity[1] * currentDt;
@@ -810,6 +782,35 @@ function onMotion(e) {
 }
 
 window.addEventListener('devicemotion', onMotion, true);
+
+/* ─────────────────────────────────────────────────────────
+   DeviceOrientationEvent → quaternion
+   The OS gives us alpha (yaw/Z), beta (pitch/X), gamma (roll/Y)
+   in ZXY intrinsic Euler angles. We convert to quaternion so
+   the 3D model and gravity removal both use the same representation.
+   This is phone-agnostic — the OS handles sensor fusion internally.
+───────────────────────────────────────────────────────── */
+function onOrientation(e) {
+  if (!running) return;
+  const toR = Math.PI / 180;
+  const a = (e.alpha || 0) * toR;   // yaw   around Z
+  const b = (e.beta  || 0) * toR;   // pitch around X
+  const g = (e.gamma || 0) * toR;   // roll  around Y
+
+  // ZXY intrinsic = YXZ extrinsic composition: Rz(a) * Rx(b) * Ry(g)
+  const ca = Math.cos(a/2), sa = Math.sin(a/2);
+  const cb = Math.cos(b/2), sb = Math.sin(b/2);
+  const cg = Math.cos(g/2), sg = Math.sin(g/2);
+
+  // Quaternion for Rz * Rx * Ry
+  const w = ca*cb*cg + sa*sb*sg;
+  const x = ca*sb*cg + sa*cb*sg;
+  const y = ca*cb*sg - sa*sb*cg;
+  const z = sa*cb*cg - ca*sb*sg;
+
+  orientation = Q.norm([w, x, y, z]);
+}
+window.addEventListener('deviceorientation', onOrientation, true);
 
 function startSensors() {
   running = true;
