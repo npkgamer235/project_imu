@@ -1,415 +1,617 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"/>
-<meta name="apple-mobile-web-app-capable" content="yes"/>
-<title>Accelerometer</title>
-<style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-:root {
-  --bg:    #0e1117;
-  --card:  #161b25;
-  --line:  rgba(255,255,255,0.06);
-  --t1:    #e8edf8;
-  --t2:    #7a8499;
-  --t3:    #363e52;
-  --cx:    #ff5a5a;
-  --cy:    #1fc98a;
-  --cz:    #4a9eff;
-  --r:     10px;
-  --mono:  'SF Mono', 'Fira Code', monospace;
-}
-html, body { height: 100%; background: var(--bg); color: var(--t1);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IMU Mobile Visualizer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
-/* ── layout ── */
-#app { display: flex; flex-direction: column; height: 100%; max-width: 480px; margin: 0 auto; }
-#header { padding: 18px 16px 14px; display: flex; align-items: center; gap: 10px;
-  border-bottom: 1px solid var(--line); flex-shrink: 0; }
-#header h1 { font-size: 17px; font-weight: 600; }
-#header .pill { margin-left: auto; display: flex; align-items: center; gap: 5px;
-  background: var(--card); border: 1px solid var(--line); border-radius: 20px;
-  padding: 4px 10px; font-size: 11px; color: var(--t2); }
-#header .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--t3); flex-shrink: 0; }
-#header .dot.on { background: var(--cy); box-shadow: 0 0 6px var(--cy); animation: blink 2s infinite; }
-@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.4} }
+        :root {
+            --bg: #0a0a0f;
+            --card: #12121a;
+            --card-border: #1a1a24;
+            --accent-green: #00ff88;
+            --accent-orange: #ff6b35;
+            --accent-cyan: #00d4ff;
+            --text: #e8e8e8;
+            --text-muted: #6b6b7b;
+        }
 
-#scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 14px 14px 24px; }
+        body {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background-image:
+                linear-gradient(rgba(0, 255, 136, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 255, 136, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+        }
 
-/* ── controls ── */
-.ctrl { display: flex; gap: 8px; margin-bottom: 16px; }
-.btn { flex: 1; padding: 12px; border-radius: var(--r); font-size: 13px; font-weight: 600;
-  cursor: pointer; border: 1px solid var(--line); background: var(--card); color: var(--t1);
-  -webkit-tap-highlight-color: transparent; }
-.btn.primary { background: var(--cy); border-color: var(--cy); color: #0e1117; }
-.btn:active { opacity: .7; }
+        header {
+            padding: 24px 32px;
+            border-bottom: 1px solid var(--card-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
 
-/* ── big axis cards ── */
-.axis-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
-.axis-card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r);
-  padding: 16px 10px; text-align: center; }
-.axis-label { font-size: 11px; font-weight: 700; letter-spacing: .1em;
-  text-transform: uppercase; margin-bottom: 8px; }
-.axis-label.x { color: var(--cx); }
-.axis-label.y { color: var(--cy); }
-.axis-label.z { color: var(--cz); }
-.axis-val { font-family: var(--mono); font-size: 22px; font-weight: 600; line-height: 1; }
-.axis-val.x { color: var(--cx); }
-.axis-val.y { color: var(--cy); }
-.axis-val.z { color: var(--cz); }
-.axis-unit { font-size: 10px; color: var(--t3); margin-top: 5px; }
+        h1 {
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            background: linear-gradient(135deg, var(--accent-green), var(--accent-cyan));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
 
-/* ── bar indicators ── */
-.bars { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
-.bar-row { display: flex; align-items: center; gap: 8px; }
-.bar-name { font-size: 12px; font-weight: 700; width: 14px; text-align: center; }
-.bar-name.x { color: var(--cx); }
-.bar-name.y { color: var(--cy); }
-.bar-name.z { color: var(--cz); }
-.bar-track { flex: 1; height: 10px; background: var(--card); border-radius: 5px;
-  border: 1px solid var(--line); overflow: hidden; position: relative; }
-.bar-center { position: absolute; left: 50%; top: 0; width: 1px; height: 100%;
-  background: var(--line); }
-.bar-fill { position: absolute; top: 0; height: 100%; border-radius: 5px;
-  transition: width .05s, left .05s; }
-.bar-num { font-family: var(--mono); font-size: 11px; color: var(--t2); width: 44px;
-  text-align: right; }
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
 
-/* ── section label ── */
-.sec { font-size: 10px; font-weight: 600; color: var(--t3); text-transform: uppercase;
-  letter-spacing: .1em; margin: 0 0 8px; }
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--text-muted);
+            transition: background 0.3s;
+        }
 
-/* ── chart ── */
-.chart-card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r);
-  padding: 12px; margin-bottom: 16px; }
-.chart-card canvas { display: block; width: 100% !important; }
-.chart-legend { display: flex; gap: 12px; margin-bottom: 8px; }
-.legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--t2); }
-.legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+        .status-dot.active {
+            background: var(--accent-green);
+            box-shadow: 0 0 10px var(--accent-green);
+        }
 
-/* ── stats ── */
-.stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 16px; }
-.stat { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 12px; }
-.stat-label { font-size: 10px; color: var(--t3); text-transform: uppercase; letter-spacing: .07em; margin-bottom: 5px; }
-.stat-val { font-family: var(--mono); font-size: 16px; font-weight: 600; color: var(--t1); }
+        main {
+            flex: 1;
+            display: flex;
+            gap: 32px;
+            padding: 32px;
+        }
 
-/* ── export ── */
-.export-btn { width: 100%; padding: 13px; border-radius: var(--r); background: var(--card);
-  border: 1px solid var(--line); color: var(--t1); font-size: 13px; font-weight: 600;
-  cursor: pointer; -webkit-tap-highlight-color: transparent; }
-.export-btn:active { opacity: .7; }
+        .visualizer-panel {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            perspective: 1000px;
+        }
 
-/* ── permission screen ── */
-#perm { position: fixed; inset: 0; background: var(--bg); z-index: 99;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  padding: 32px; text-align: center; }
-#perm h2 { font-size: 22px; font-weight: 700; margin-bottom: 10px; }
-#perm p  { color: var(--t2); font-size: 14px; line-height: 1.6; margin-bottom: 28px; max-width: 280px; }
-#perm-btn { padding: 14px 36px; background: var(--cy); border: none; border-radius: var(--r);
-  font-size: 15px; font-weight: 700; color: #0e1117; cursor: pointer; }
-</style>
+        .phone-container {
+            width: 200px;
+            height: 400px;
+            transform-style: preserve-3d;
+            transition: transform 0.1s ease-out;
+        }
+
+        .phone {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(145deg, #1a1a24, #0d0d14);
+            border-radius: 30px;
+            border: 3px solid var(--accent-green);
+            box-shadow:
+                0 0 30px rgba(0, 255, 136, 0.3),
+                inset 0 0 60px rgba(0, 0, 0, 0.5);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .phone-notch {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80px;
+            height: 24px;
+            background: #0a0a0f;
+            border-radius: 0 0 16px 16px;
+            z-index: 10;
+        }
+
+        .phone-screen {
+            flex: 1;
+            margin: 40px 12px 12px;
+            background: linear-gradient(180deg, #0a0a0f, #12121a);
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .phone-screen::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 2px,
+                rgba(0, 255, 136, 0.03) 2px,
+                rgba(0, 255, 136, 0.03) 4px
+            );
+        }
+
+        .screen-icon {
+            font-size: 48px;
+            opacity: 0.5;
+        }
+
+        .phone-home {
+            width: 60px;
+            height: 60px;
+            border: 2px solid var(--accent-green);
+            border-radius: 50%;
+            margin: 16px auto;
+            opacity: 0.5;
+        }
+
+        .data-panel {
+            width: 360px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .data-card {
+            background: var(--card);
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            padding: 20px;
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .card-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+
+        .card-icon.accel {
+            background: rgba(0, 212, 255, 0.15);
+            color: var(--accent-cyan);
+        }
+
+        .card-icon.gyro {
+            background: rgba(255, 107, 53, 0.15);
+            color: var(--accent-orange);
+        }
+
+        .card-title {
+            font-size: 14px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .card-subtitle {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .data-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--card-border);
+        }
+
+        .data-row:last-child {
+            border-bottom: none;
+        }
+
+        .data-label {
+            font-size: 12px;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .axis-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .axis-dot.x { background: #ff4757; }
+        .axis-dot.y { background: #2ed573; }
+        .axis-dot.z { background: #1e90ff; }
+
+        .data-value {
+            font-size: 16px;
+            font-weight: 500;
+            font-variant-numeric: tabular-nums;
+            min-width: 100px;
+            text-align: right;
+        }
+
+        .data-value.cyan { color: var(--accent-cyan); }
+        .data-value.orange { color: var(--accent-orange); }
+
+        .data-bar {
+            height: 4px;
+            background: var(--card-border);
+            border-radius: 2px;
+            margin-top: 4px;
+            overflow: hidden;
+        }
+
+        .data-bar-fill {
+            height: 100%;
+            border-radius: 2px;
+            transition: width 0.1s ease-out;
+        }
+
+        .data-bar-fill.cyan { background: var(--accent-cyan); }
+        .data-bar-fill.orange { background: var(--accent-orange); }
+
+        .connect-btn {
+            width: 100%;
+            padding: 16px;
+            border: 2px solid var(--accent-green);
+            background: transparent;
+            color: var(--accent-green);
+            font-family: inherit;
+            font-size: 14px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .connect-btn:hover {
+            background: var(--accent-green);
+            color: var(--bg);
+            box-shadow: 0 0 30px rgba(0, 255, 136, 0.4);
+        }
+
+        .connect-btn.active {
+            background: var(--accent-green);
+            color: var(--bg);
+        }
+
+        .connect-btn.active:hover {
+            background: transparent;
+            color: var(--accent-green);
+        }
+
+        footer {
+            padding: 20px 32px;
+            border-top: 1px solid var(--card-border);
+            text-align: center;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .fallback-hint {
+            background: rgba(255, 107, 53, 0.1);
+            border: 1px solid rgba(255, 107, 53, 0.3);
+            border-radius: 12px;
+            padding: 16px;
+            text-align: center;
+            color: var(--accent-orange);
+        }
+
+        @media (max-width: 768px) {
+            main {
+                flex-direction: column;
+                padding: 20px;
+            }
+
+            .data-panel {
+                width: 100%;
+            }
+
+            .visualizer-panel {
+                min-height: 350px;
+            }
+        }
+    </style>
 </head>
 <body>
-
-<div id="perm">
-  <div style="font-size:48px;margin-bottom:20px;">📐</div>
-  <h2>Accelerometer</h2>
-  <p>Reads your phone's accelerometer and shows live X, Y, Z acceleration values.</p>
-  <button id="perm-btn" onclick="init()">Enable Sensor</button>
-</div>
-
-<div id="app">
-  <div id="header">
-    <div style="font-size:22px;">📐</div>
-    <h1>Accelerometer</h1>
-    <div class="pill">
-      <div class="dot" id="dot"></div>
-      <span id="status-txt">stopped</span>
-    </div>
-  </div>
-
-  <div id="scroll">
-
-    <div class="ctrl">
-      <button class="btn primary" id="btn-start" onclick="startStop()">▶ Start</button>
-      <button class="btn" onclick="resetAll()">↺ Reset</button>
-    </div>
-
-    <!-- live values -->
-    <p class="sec">Live acceleration (m/s²)</p>
-    <div class="axis-row">
-      <div class="axis-card">
-        <div class="axis-label x">X</div>
-        <div class="axis-val x" id="val-x">0.00</div>
-        <div class="axis-unit">m/s²</div>
-      </div>
-      <div class="axis-card">
-        <div class="axis-label y">Y</div>
-        <div class="axis-val y" id="val-y">0.00</div>
-        <div class="axis-unit">m/s²</div>
-      </div>
-      <div class="axis-card">
-        <div class="axis-label z">Z</div>
-        <div class="axis-val z" id="val-z">0.00</div>
-        <div class="axis-unit">m/s²</div>
-      </div>
-    </div>
-
-    <!-- bar indicators ±20 m/s² range -->
-    <p class="sec">Range indicator (±20 m/s²)</p>
-    <div class="bars">
-      <div class="bar-row">
-        <span class="bar-name x">X</span>
-        <div class="bar-track">
-          <div class="bar-center"></div>
-          <div class="bar-fill" id="bar-x" style="background:var(--cx)"></div>
+    <header>
+        <h1>IMU Visualizer</h1>
+        <div class="status-badge">
+            <div class="status-dot" id="statusDot"></div>
+            <span id="statusText">Disconnected</span>
         </div>
-        <span class="bar-num" id="bnum-x">0.00</span>
-      </div>
-      <div class="bar-row">
-        <span class="bar-name y">Y</span>
-        <div class="bar-track">
-          <div class="bar-center"></div>
-          <div class="bar-fill" id="bar-y" style="background:var(--cy)"></div>
+    </header>
+
+    <main>
+        <div class="visualizer-panel">
+            <div class="phone-container" id="phoneContainer">
+                <div class="phone">
+                    <div class="phone-notch"></div>
+                    <div class="phone-screen">
+                        <div class="screen-icon">&#9881;</div>
+                    </div>
+                    <div class="phone-home"></div>
+                </div>
+            </div>
         </div>
-        <span class="bar-num" id="bnum-y">0.00</span>
-      </div>
-      <div class="bar-row">
-        <span class="bar-name z">Z</span>
-        <div class="bar-track">
-          <div class="bar-center"></div>
-          <div class="bar-fill" id="bar-z" style="background:var(--cz)"></div>
+
+        <div class="data-panel">
+            <div class="data-card">
+                <div class="card-header">
+                    <div class="card-icon accel">&#9673;</div>
+                    <div>
+                        <div class="card-title">Accelerometer</div>
+                        <div class="card-subtitle">Linear Acceleration (m/s²)</div>
+                    </div>
+                </div>
+                <div class="data-row">
+                    <span class="data-label"><span class="axis-dot x"></span>X</span>
+                    <span class="data-value cyan" id="accelX">0.00</span>
+                </div>
+                <div class="data-bar"><div class="data-bar-fill cyan" id="accelXBar" style="width: 50%"></div></div>
+
+                <div class="data-row">
+                    <span class="data-label"><span class="axis-dot y"></span>Y</span>
+                    <span class="data-value cyan" id="accelY">0.00</span>
+                </div>
+                <div class="data-bar"><div class="data-bar-fill cyan" id="accelYBar" style="width: 50%"></div></div>
+
+                <div class="data-row">
+                    <span class="data-label"><span class="axis-dot z"></span>Z</span>
+                    <span class="data-value cyan" id="accelZ">0.00</span>
+                </div>
+                <div class="data-bar"><div class="data-bar-fill cyan" id="accelZBar" style="width: 50%"></div></div>
+            </div>
+
+            <div class="data-card">
+                <div class="card-header">
+                    <div class="card-icon gyro">&#9680;</div>
+                    <div>
+                        <div class="card-title">Gyroscope</div>
+                        <div class="card-subtitle">Rotation (degrees)</div>
+                    </div>
+                </div>
+                <div class="data-row">
+                    <span class="data-label"><span class="axis-dot x"></span>Alpha</span>
+                    <span class="data-value orange" id="gyroAlpha">0.00</span>
+                </div>
+                <div class="data-bar"><div class="data-bar-fill orange" id="gyroAlphaBar" style="width: 0%"></div></div>
+
+                <div class="data-row">
+                    <span class="data-label"><span class="axis-dot y"></span>Beta</span>
+                    <span class="data-value orange" id="gyroBeta">0.00</span>
+                </div>
+                <div class="data-bar"><div class="data-bar-fill orange" id="gyroBetaBar" style="width: 50%"></div></div>
+
+                <div class="data-row">
+                    <span class="data-label"><span class="axis-dot z"></span>Gamma</span>
+                    <span class="data-value orange" id="gyroGamma">0.00</span>
+                </div>
+                <div class="data-bar"><div class="data-bar-fill orange" id="gyroGammaBar" style="width: 50%"></div></div>
+            </div>
+
+            <button class="connect-btn" id="connectBtn">Connect Sensors</button>
+
+            <div class="fallback-hint" id="fallbackHint" style="display: none;">
+                Desktop mode: Move mouse to rotate phone
+            </div>
         </div>
-        <span class="bar-num" id="bnum-z">0.00</span>
-      </div>
-    </div>
+    </main>
 
-    <!-- chart -->
-    <p class="sec">Time series</p>
-    <div class="chart-card">
-      <div class="chart-legend">
-        <div class="legend-item"><div class="legend-dot" style="background:var(--cx)"></div>X</div>
-        <div class="legend-item"><div class="legend-dot" style="background:var(--cy)"></div>Y</div>
-        <div class="legend-item"><div class="legend-dot" style="background:var(--cz)"></div>Z</div>
-      </div>
-      <canvas id="chart" height="140"></canvas>
-    </div>
+    <footer>
+        <p>IMU Mobile Visualizer &mdash; Real-time accelerometer and gyroscope visualization</p>
+    </footer>
 
-    <!-- stats -->
-    <p class="sec">Session stats</p>
-    <div class="stats-grid">
-      <div class="stat"><div class="stat-label">Sample rate</div><div class="stat-val" id="st-hz">— Hz</div></div>
-      <div class="stat"><div class="stat-label">Samples</div><div class="stat-val" id="st-n">0</div></div>
-      <div class="stat"><div class="stat-label">Peak |a|</div><div class="stat-val" id="st-peak">0.00 m/s²</div></div>
-      <div class="stat"><div class="stat-label">Duration</div><div class="stat-val" id="st-dur">0 s</div></div>
-      <div class="stat"><div class="stat-label">Max X</div><div class="stat-val" id="st-mx" style="color:var(--cx)">0.00</div></div>
-      <div class="stat"><div class="stat-label">Max Y</div><div class="stat-val" id="st-my" style="color:var(--cy)">0.00</div></div>
-      <div class="stat"><div class="stat-label">Max Z</div><div class="stat-val" id="st-mz" style="color:var(--cz)">0.00</div></div>
-      <div class="stat"><div class="stat-label">Δt (ms)</div><div class="stat-val" id="st-dt">—</div></div>
-    </div>
+    <script>
+        const phoneContainer = document.getElementById('phoneContainer');
+        const connectBtn = document.getElementById('connectBtn');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const fallbackHint = document.getElementById('fallbackHint');
 
-    <button class="export-btn" onclick="exportCSV()">⬇ Export CSV</button>
+        const accelX = document.getElementById('accelX');
+        const accelY = document.getElementById('accelY');
+        const accelZ = document.getElementById('accelZ');
+        const gyroAlpha = document.getElementById('gyroAlpha');
+        const gyroBeta = document.getElementById('gyroBeta');
+        const gyroGamma = document.getElementById('gyroGamma');
 
-  </div>
-</div>
+        const accelXBar = document.getElementById('accelXBar');
+        const accelYBar = document.getElementById('accelYBar');
+        const accelZBar = document.getElementById('accelZBar');
+        const gyroAlphaBar = document.getElementById('gyroAlphaBar');
+        const gyroBetaBar = document.getElementById('gyroBetaBar');
+        const gyroGammaBar = document.getElementById('gyroGammaBar');
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
-<script>
-/* ── state ── */
-let running   = false;
-let samples   = [];           // {t, x, y, z}
-let srCount   = 0, srTimer = 0, hz = 0;
-let peakMag   = 0;
-let maxX = 0, maxY = 0, maxZ = 0;
-let sessionStart = null;
-let lastDt = 0;
+        let isConnected = false;
+        let useFallback = true;
 
-/* ── chart setup ── */
-const WINDOW = 80;   // samples shown on chart
-const ctx = document.getElementById('chart').getContext('2d');
-const emptyData = () => Array(WINDOW).fill(null);
-const chart = new Chart(ctx, {
-  type: 'line',
-  data: {
-    labels: Array(WINDOW).fill(''),
-    datasets: [
-      { label:'X', data: emptyData(), borderColor:'#ff5a5a', borderWidth:1.5, pointRadius:0, tension:0.3, fill:false },
-      { label:'Y', data: emptyData(), borderColor:'#1fc98a', borderWidth:1.5, pointRadius:0, tension:0.3, fill:false },
-      { label:'Z', data: emptyData(), borderColor:'#4a9eff', borderWidth:1.5, pointRadius:0, tension:0.3, fill:false },
-    ]
-  },
-  options: {
-    responsive: true, maintainAspectRatio: false, animation: false,
-    plugins: { legend: { display: false } },
-    scales: {
-      x: { display: false },
-      y: {
-        min: -25, max: 25,
-        ticks: { color:'#363e52', font:{size:10}, maxTicksLimit:7,
-          callback: v => v === 0 ? '0' : v },
-        grid: { color:'rgba(255,255,255,0.04)' }
-      }
-    }
-  }
-});
+        // Current rotation values
+        let currentAlpha = 0;
+        let currentBeta = 0;
+        let currentGamma = 0;
 
-function pushChart(x, y, z) {
-  [chart.data.datasets[0].data,
-   chart.data.datasets[1].data,
-   chart.data.datasets[2].data].forEach((d, i) => {
-    d.push([x,y,z][i]);
-    if (d.length > WINDOW) d.shift();
-  });
-  chart.data.labels.push('');
-  if (chart.data.labels.length > WINDOW) chart.data.labels.shift();
-}
+        // Target rotation for smooth interpolation
+        let targetAlpha = 0;
+        let targetBeta = 0;
+        let targetGamma = 0;
 
-/* ── bar helper ── */
-function setBar(id, val) {
-  const el = document.getElementById(id);
-  const MAX = 20;
-  const pct = Math.min(Math.abs(val) / MAX, 1) * 50;   // 0–50% of half-track
-  if (val >= 0) {
-    el.style.left  = '50%';
-    el.style.width = pct + '%';
-  } else {
-    el.style.left  = (50 - pct) + '%';
-    el.style.width = pct + '%';
-  }
-}
+        function normalizeAngle(angle) {
+            return ((angle % 360) + 360) % 360;
+        }
 
-/* ── sensor handler ── */
-function onMotion(e) {
-  if (!running) return;
+        function lerp(current, target, factor) {
+            return current + (target - current) * factor;
+        }
 
-  const aig = e.accelerationIncludingGravity || {};
-  const x = aig.x || 0;
-  const y = aig.y || 0;
-  const z = aig.z || 0;
-  lastDt = e.interval || 0;
+        function updatePhoneRotation() {
+            currentAlpha = lerp(currentAlpha, targetAlpha, 0.15);
+            currentBeta = lerp(currentBeta, targetBeta, 0.15);
+            currentGamma = lerp(currentGamma, targetGamma, 0.15);
 
-  const mag = Math.sqrt(x*x + y*y + z*z);
-  if (mag > peakMag) peakMag = mag;
-  if (Math.abs(x) > maxX) maxX = Math.abs(x);
-  if (Math.abs(y) > maxY) maxY = Math.abs(y);
-  if (Math.abs(z) > maxZ) maxZ = Math.abs(z);
+            const rotateX = currentBeta;
+            const rotateY = currentGamma;
+            const rotateZ = currentAlpha;
 
-  samples.push({ t: performance.now(), x, y, z });
+            phoneContainer.style.transform = `rotateX(${rotateX}deg) rotateY(${rotateY}deg) rotateZ(${rotateZ}deg)`;
 
-  // sample rate counter
-  srCount++;
-  const now = performance.now();
-  if (now - srTimer >= 1000) { hz = srCount; srCount = 0; srTimer = now; }
+            requestAnimationFrame(updatePhoneRotation);
+        }
 
-  // update live display
-  const f = v => (v >= 0 ? ' ' : '') + v.toFixed(2);
-  document.getElementById('val-x').textContent  = f(x);
-  document.getElementById('val-y').textContent  = f(y);
-  document.getElementById('val-z').textContent  = f(z);
-  document.getElementById('bnum-x').textContent = f(x);
-  document.getElementById('bnum-y').textContent = f(y);
-  document.getElementById('bnum-z').textContent = f(z);
-  setBar('bar-x', x);
-  setBar('bar-y', y);
-  setBar('bar-z', z);
+        function updateBar(barElement, value, maxValue) {
+            const normalized = Math.min(Math.abs(value) / maxValue, 1) * 100;
+            barElement.style.width = normalized + '%';
+        }
 
-  pushChart(x, y, z);
-  chart.update('none');
+        function formatValue(value) {
+            const num = parseFloat(value);
+            return num.toFixed(2);
+        }
 
-  // stats
-  const dur = sessionStart ? ((performance.now() - sessionStart)/1000).toFixed(0) : 0;
-  document.getElementById('st-hz').textContent   = hz + ' Hz';
-  document.getElementById('st-n').textContent    = samples.length;
-  document.getElementById('st-peak').textContent = peakMag.toFixed(2) + ' m/s²';
-  document.getElementById('st-dur').textContent  = dur + ' s';
-  document.getElementById('st-mx').textContent   = maxX.toFixed(2);
-  document.getElementById('st-my').textContent   = maxY.toFixed(2);
-  document.getElementById('st-mz').textContent   = maxZ.toFixed(2);
-  document.getElementById('st-dt').textContent   = lastDt.toFixed(1);
-}
+        function handleOrientation(event) {
+            targetAlpha = event.alpha || 0;
+            targetBeta = event.beta || 0;
+            targetGamma = event.gamma || 0;
 
-window.addEventListener('devicemotion', onMotion, true);
+            gyroAlpha.textContent = formatValue(targetAlpha);
+            gyroBeta.textContent = formatValue(targetBeta);
+            gyroGamma.textContent = formatValue(targetGamma);
 
-/* ── controls ── */
-function startStop() {
-  running = !running;
-  const btn = document.getElementById('btn-start');
-  const dot = document.getElementById('dot');
-  if (running) {
-    sessionStart = performance.now();
-    srTimer = performance.now();
-    btn.textContent = '■ Stop';
-    btn.classList.remove('primary');
-    btn.style.background = '';
-    btn.style.borderColor = '#ff5a5a';
-    btn.style.color = '#ff5a5a';
-    dot.classList.add('on');
-    document.getElementById('status-txt').textContent = 'live';
-  } else {
-    btn.textContent = '▶ Start';
-    btn.classList.add('primary');
-    btn.style.background = '';
-    btn.style.borderColor = '';
-    btn.style.color = '';
-    dot.classList.remove('on');
-    document.getElementById('status-txt').textContent = 'stopped';
-  }
-}
+            updateBar(gyroAlphaBar, targetAlpha, 360);
+            updateBar(gyroBetaBar, targetBeta, 180);
+            updateBar(gyroGammaBar, targetGamma, 90);
+        }
 
-function resetAll() {
-  running = false;
-  samples = []; peakMag = 0; maxX = 0; maxY = 0; maxZ = 0;
-  sessionStart = null; hz = 0; srCount = 0;
-  const btn = document.getElementById('btn-start');
-  btn.textContent = '▶ Start';
-  btn.classList.add('primary');
-  btn.style.background = btn.style.borderColor = btn.style.color = '';
-  document.getElementById('dot').classList.remove('on');
-  document.getElementById('status-txt').textContent = 'stopped';
-  ['val-x','val-y','val-z'].forEach(id => document.getElementById(id).textContent = '0.00');
-  ['bnum-x','bnum-y','bnum-z'].forEach(id => document.getElementById(id).textContent = '0.00');
-  ['bar-x','bar-y','bar-z'].forEach(id => { const b=document.getElementById(id); b.style.width='0%'; });
-  ['st-hz','st-n','st-peak','st-dur','st-mx','st-my','st-mz','st-dt'].forEach(id =>
-    document.getElementById(id).textContent = id==='st-hz'?'— Hz':id==='st-n'?'0':id==='st-dur'?'0 s':'—');
-  chart.data.datasets.forEach(d => { d.data = emptyData(); });
-  chart.data.labels = Array(WINDOW).fill('');
-  chart.update('none');
-}
+        function handleMotion(event) {
+            const acc = event.accelerationIncludingGravity || event.acceleration;
 
-/* ── CSV export ── */
-function exportCSV() {
-  if (!samples.length) { alert('No data — press Start first.'); return; }
-  const lines = ['t_ms,x_ms2,y_ms2,z_ms2',
-    ...samples.map(s => `${s.t.toFixed(2)},${s.x.toFixed(4)},${s.y.toFixed(4)},${s.z.toFixed(4)}`)
-  ].join('\n');
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([lines], {type:'text/csv'}));
-  a.download = 'accel_' + Date.now() + '.csv';
-  a.click();
-}
+            if (acc) {
+                const x = acc.x || 0;
+                const y = acc.y || 0;
+                const z = acc.z || 0;
 
-/* ── permission / init ── */
-function init() {
-  if (typeof DeviceMotionEvent !== 'undefined' &&
-      typeof DeviceMotionEvent.requestPermission === 'function') {
-    DeviceMotionEvent.requestPermission()
-      .then(s => { if (s === 'granted') hidePerm(); else alert('Permission denied.'); })
-      .catch(() => hidePerm());
-  } else {
-    hidePerm();
-  }
-}
+                accelX.textContent = formatValue(x);
+                accelY.textContent = formatValue(y);
+                accelZ.textContent = formatValue(z);
 
-function hidePerm() {
-  document.getElementById('perm').style.display = 'none';
-}
+                updateBar(accelXBar, x, 20);
+                updateBar(accelYBar, y, 20);
+                updateBar(accelZBar, z, 20);
+            }
+        }
 
-// Non-iOS: hide perm screen immediately
-if (typeof DeviceMotionEvent === 'undefined' ||
-    typeof DeviceMotionEvent.requestPermission !== 'function') {
-  hidePerm();
-}
-</script>
+        function handleMouseMove(event) {
+            if (!useFallback) return;
+
+            const rect = document.body.getBoundingClientRect();
+            const centerX = rect.width / 2;
+            const centerY = rect.height / 2;
+
+            const normalizedX = (event.clientX - centerX) / centerX;
+            const normalizedY = (event.clientY - centerY) / centerY;
+
+            targetBeta = normalizedY * 45;
+            targetGamma = normalizedX * 60;
+        }
+
+        function requestSensorPermission() {
+            if (typeof DeviceOrientationEvent !== 'undefined' &&
+                typeof DeviceOrientationEvent.requestPermission === 'function') {
+                DeviceOrientationEvent.requestPermission()
+                    .then(permissionState => {
+                        if (permissionState === 'granted') {
+                            startSensorListening();
+                        } else {
+                            alert('Sensor permission denied');
+                        }
+                    })
+                    .catch(console.error);
+            } else {
+                startSensorListening();
+            }
+        }
+
+        function startSensorListening() {
+            window.addEventListener('deviceorientation', handleOrientation);
+            window.addEventListener('devicemotion', handleMotion);
+
+            useFallback = false;
+            fallbackHint.style.display = 'none';
+
+            statusDot.classList.add('active');
+            statusText.textContent = 'Connected';
+            connectBtn.classList.add('active');
+            connectBtn.textContent = 'Disconnect';
+            isConnected = true;
+        }
+
+        function stopSensorListening() {
+            window.removeEventListener('deviceorientation', handleOrientation);
+            window.removeEventListener('devicemotion', handleMotion);
+
+            useFallback = true;
+            if (window.innerWidth > 768) {
+                fallbackHint.style.display = 'block';
+            }
+
+            statusDot.classList.remove('active');
+            statusText.textContent = 'Disconnected';
+            connectBtn.classList.remove('active');
+            connectBtn.textContent = 'Connect Sensors';
+            isConnected = false;
+
+            // Reset values
+            targetAlpha = targetBeta = targetGamma = 0;
+        }
+
+        connectBtn.addEventListener('click', () => {
+            if (isConnected) {
+                stopSensorListening();
+            } else {
+                requestSensorPermission();
+            }
+        });
+
+        // Desktop fallback with mouse
+        document.addEventListener('mousemove', handleMouseMove);
+
+        // Check if we need fallback mode
+        if (!('DeviceOrientationEvent' in window)) {
+            fallbackHint.style.display = 'block';
+            useFallback = true;
+        }
+
+        // Start animation loop
+        updatePhoneRotation();
+    </script>
 </body>
 </html>
