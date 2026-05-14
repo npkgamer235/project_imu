@@ -90,14 +90,70 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            perspective: 1000px;
+            perspective: 1200px;
+            overflow: hidden;
+        }
+
+        .scene {
+            position: relative;
+            transform-style: preserve-3d;
+            width: 300px;
+            height: 300px;
+        }
+
+        .table {
+            position: absolute;
+            width: 400px;
+            height: 400px;
+            bottom: -150px;
+            left: 50%;
+            transform: translateX(-50%) rotateX(90deg);
+            background: linear-gradient(135deg, #1a1a24 0%, #12121a 100%);
+            border: 2px solid #2a2a3a;
+            border-radius: 8px;
+            box-shadow:
+                0 10px 40px rgba(0, 0, 0, 0.5),
+                inset 0 0 60px rgba(0, 255, 136, 0.02);
+        }
+
+        .table::before {
+            content: '';
+            position: absolute;
+            inset: 20px;
+            border: 1px solid rgba(0, 255, 136, 0.1);
+            border-radius: 4px;
+        }
+
+        .table::after {
+            content: 'SURFACE';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotateX(-180deg);
+            font-size: 10px;
+            letter-spacing: 4px;
+            color: rgba(0, 255, 136, 0.15);
+        }
+
+        .phone-stand {
+            position: absolute;
+            bottom: -60px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 60px;
+            height: 10px;
+            background: linear-gradient(180deg, #3a3a4a, #2a2a3a);
+            border-radius: 2px;
+            transform-style: preserve-3d;
         }
 
         .phone-container {
             width: 200px;
             height: 400px;
             transform-style: preserve-3d;
-            transition: transform 0.1s ease-out;
+            position: relative;
+            z-index: 10;
+            transition: transform 0.08s ease-out;
         }
 
         .phone {
@@ -353,13 +409,17 @@
 
     <main>
         <div class="visualizer-panel">
-            <div class="phone-container" id="phoneContainer">
-                <div class="phone">
-                    <div class="phone-notch"></div>
-                    <div class="phone-screen">
-                        <div class="screen-icon">&#9881;</div>
+            <div class="scene">
+                <div class="table"></div>
+                <div class="phone-stand"></div>
+                <div class="phone-container" id="phoneContainer">
+                    <div class="phone">
+                        <div class="phone-notch"></div>
+                        <div class="phone-screen">
+                            <div class="screen-icon">&#9881;</div>
+                        </div>
+                        <div class="phone-home"></div>
                     </div>
-                    <div class="phone-home"></div>
                 </div>
             </div>
         </div>
@@ -462,7 +522,7 @@
 
         // Target rotation for smooth interpolation
         let targetAlpha = 0;
-        let targetBeta = 0;
+        let targetBeta = 90;  // Upright position (phone standing on table)
         let targetGamma = 0;
 
         function normalizeAngle(angle) {
@@ -474,12 +534,21 @@
         }
 
         function updatePhoneRotation() {
-            currentAlpha = lerp(currentAlpha, targetAlpha, 0.15);
-            currentBeta = lerp(currentBeta, targetBeta, 0.15);
-            currentGamma = lerp(currentGamma, targetGamma, 0.15);
+            currentAlpha = lerp(currentAlpha, targetAlpha, 0.12);
+            currentBeta = lerp(currentBeta, targetBeta, 0.12);
+            currentGamma = lerp(currentGamma, targetGamma, 0.12);
 
-            const rotateX = currentBeta;
-            const rotateY = currentGamma;
+            // Convert device orientation to phone position on table
+            // Device beta = 90° means phone is vertical (upright)
+            // Device beta = 0° means phone is flat on table
+            // So we need to rotate based on device orientation
+            const flatBeta = 90 - currentBeta; // Phone's tilt from horizontal
+            const tiltGamma = currentGamma; // Phone's left/right tilt
+
+            // When phone is upright (portrait), it should stand on the table
+            // rotateX controls front/back tilt, rotateY controls left/right tilt
+            const rotateX = flatBeta;
+            const rotateY = tiltGamma;
             const rotateZ = currentAlpha;
 
             phoneContainer.style.transform = `rotateX(${rotateX}deg) rotateY(${rotateY}deg) rotateZ(${rotateZ}deg)`;
@@ -539,8 +608,10 @@
             const normalizedX = (event.clientX - centerX) / centerX;
             const normalizedY = (event.clientY - centerY) / centerY;
 
-            targetBeta = normalizedY * 45;
-            targetGamma = normalizedX * 60;
+            // When upright, beta around 90, gamma around 0
+            // Mouse Y moves vertical tilt (beta), mouse X moves rotation (alpha)
+            targetBeta = 90 + normalizedY * 60;  // Vertical tilt
+            targetGamma = normalizedX * 40;     // Left/right tilt
         }
 
         function requestSensorPermission() {
@@ -589,8 +660,10 @@
             connectBtn.textContent = 'Connect Sensors';
             isConnected = false;
 
-            // Reset values
-            targetAlpha = targetBeta = targetGamma = 0;
+            // Reset values - phone upright on table
+            targetAlpha = 0;
+            targetBeta = 90;  // Upright
+            targetGamma = 0;
         }
 
         connectBtn.addEventListener('click', () => {
