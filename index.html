@@ -378,6 +378,34 @@
             gap: 6px;
         }
 
+        .lock-btn {
+            background: transparent;
+            border: 1px solid var(--card-border);
+            border-radius: 6px;
+            padding: 4px;
+            cursor: pointer;
+            color: var(--text-muted);
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .lock-btn:hover {
+            border-color: var(--accent-orange);
+            color: var(--accent-orange);
+        }
+
+        .lock-btn.locked {
+            background: rgba(255, 107, 53, 0.2);
+            border-color: var(--accent-orange);
+            color: var(--accent-orange);
+        }
+
+        .lock-btn.locked svg path:nth-child(2) {
+            display: none;
+        }
+
         .gauge-wrapper {
             display: flex;
             align-items: center;
@@ -565,6 +593,11 @@
                             <span class="value" id="gyroAlpha">0</span>
                         </div>
                         <span class="gauge-label"><span class="axis-dot x"></span>&alpha;</span>
+                        <button class="lock-btn" id="lockAlpha" title="Lock alpha axis">
+                            <svg viewBox="0 0 24 24" width="16" height="16">
+                                <path fill="currentColor" d="M12 17a2 2 0 0 0 2-2 2 2 0 0 0-2-2 2 2 0 0 0-2 2 2 2 0 0 0 2 2m6-9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2h1V6a5 5 0 0 1 5-5 5 5 0 0 1 5 5v2h1m-6-5a3 3 0 0 0-3 3v2h6V6a3 3 0 0 0-3-3z"/>
+                            </svg>
+                        </button>
                     </div>
                     <div class="gauge-item">
                         <div class="angle-gauge orange">
@@ -578,6 +611,11 @@
                             <span class="value" id="gyroBeta">90</span>
                         </div>
                         <span class="gauge-label"><span class="axis-dot y"></span>&beta;</span>
+                        <button class="lock-btn" id="lockBeta" title="Lock beta axis">
+                            <svg viewBox="0 0 24 24" width="16" height="16">
+                                <path fill="currentColor" d="M12 17a2 2 0 0 0 2-2 2 2 0 0 0-2-2 2 2 0 0 0-2 2 2 2 0 0 0 2 2m6-9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2h1V6a5 5 0 0 1 5-5 5 5 0 0 1 5 5v2h1m-6-5a3 3 0 0 0-3 3v2h6V6a3 3 0 0 0-3-3z"/>
+                            </svg>
+                        </button>
                     </div>
                     <div class="gauge-item">
                         <div class="angle-gauge orange">
@@ -591,6 +629,11 @@
                             <span class="value" id="gyroGamma">0</span>
                         </div>
                         <span class="gauge-label"><span class="axis-dot z"></span>&gamma;</span>
+                        <button class="lock-btn" id="lockGamma" title="Lock gamma axis">
+                            <svg viewBox="0 0 24 24" width="16" height="16">
+                                <path fill="currentColor" d="M12 17a2 2 0 0 0 2-2 2 2 0 0 0-2-2 2 2 0 0 0-2 2 2 2 0 0 0 2 2m6-9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2h1V6a5 5 0 0 1 5-5 5 5 0 0 1 5 5v2h1m-6-5a3 3 0 0 0-3 3v2h6V6a3 3 0 0 0-3-3z"/>
+                            </svg>
+                        </button>
                     </div>
                 </div>
             </div>
@@ -641,6 +684,32 @@
         let targetBeta = 90;
         let targetGamma = 0;
 
+        // Lock states for each axis
+        let lockAlpha = false;
+        let lockBeta = false;
+        let lockGamma = false;
+
+        // Lock button elements
+        const lockAlphaBtn = document.getElementById('lockAlpha');
+        const lockBetaBtn = document.getElementById('lockBeta');
+        const lockGammaBtn = document.getElementById('lockGamma');
+
+        // Add click handlers for lock buttons
+        lockAlphaBtn.addEventListener('click', () => {
+            lockAlpha = !lockAlpha;
+            lockAlphaBtn.classList.toggle('locked', lockAlpha);
+        });
+
+        lockBetaBtn.addEventListener('click', () => {
+            lockBeta = !lockBeta;
+            lockBetaBtn.classList.toggle('locked', lockBeta);
+        });
+
+        lockGammaBtn.addEventListener('click', () => {
+            lockGamma = !lockGamma;
+            lockGammaBtn.classList.toggle('locked', lockGamma);
+        });
+
         function shortestAnglePath(current, target) {
             let diff = target - current;
             while (diff > 180) diff -= 360;
@@ -653,9 +722,16 @@
         }
 
         function updatePhoneRotation() {
-            currentAlpha = shortestAnglePath(currentAlpha, targetAlpha);
-            currentBeta = lerp(currentBeta, targetBeta, 0.12);
-            currentGamma = lerp(currentGamma, targetGamma, 0.12);
+            // Only update non-locked axes
+            if (!lockAlpha) {
+                currentAlpha = shortestAnglePath(currentAlpha, targetAlpha);
+            }
+            if (!lockBeta) {
+                currentBeta = lerp(currentBeta, targetBeta, 0.12);
+            }
+            if (!lockGamma) {
+                currentGamma = lerp(currentGamma, targetGamma, 0.12);
+            }
 
             const flatBeta = 90 - currentBeta;
             const tiltGamma = currentGamma;
