@@ -287,6 +287,46 @@
             border-bottom: none;
         }
 
+        .angle-gauge {
+            width: 60px;
+            height: 60px;
+            position: relative;
+        }
+
+        .angle-gauge svg {
+            width: 100%;
+            height: 100%;
+            transform: rotate(-90deg);
+        }
+
+        .angle-gauge .track {
+            fill: none;
+            stroke: var(--card-border);
+            stroke-width: 4;
+        }
+
+        .angle-gauge .fill {
+            fill: none;
+            stroke-width: 4;
+            stroke-linecap: round;
+            transition: stroke-dashoffset 0.1s ease-out;
+        }
+
+        .angle-gauge.cyan .fill { stroke: var(--accent-cyan); }
+        .angle-gauge.orange .fill { stroke: var(--accent-orange); }
+
+        .angle-gauge .value {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 11px;
+            font-weight: 500;
+        }
+
+        .angle-gauge.cyan .value { color: var(--accent-cyan); }
+        .angle-gauge.orange .value { color: var(--accent-orange); }
+
         .data-label {
             font-size: 12px;
             color: var(--text-muted);
@@ -315,6 +355,34 @@
 
         .data-value.cyan { color: var(--accent-cyan); }
         .data-value.orange { color: var(--accent-orange); }
+
+        .gauge-container {
+            display: flex;
+            justify-content: space-around;
+            padding: 16px 0;
+            gap: 12px;
+        }
+
+        .gauge-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .gauge-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .gauge-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
 
         .data-bar {
             height: 4px;
@@ -433,23 +501,47 @@
                         <div class="card-subtitle">Linear Acceleration (m/s²)</div>
                     </div>
                 </div>
-                <div class="data-row">
-                    <span class="data-label"><span class="axis-dot x"></span>X</span>
-                    <span class="data-value cyan" id="accelX">0.00</span>
+                <div class="gauge-container">
+                    <div class="gauge-item">
+                        <div class="angle-gauge cyan">
+                            <svg viewBox="0 0 36 36">
+                                <circle class="track" cx="18" cy="18" r="15"/>
+                                <circle class="fill" cx="18" cy="18" r="15"
+                                    stroke-dasharray="94.25"
+                                    stroke-dashoffset="47.12"
+                                    id="accelXGauge"/>
+                            </svg>
+                            <span class="value" id="accelX">0.0</span>
+                        </div>
+                        <span class="gauge-label"><span class="axis-dot x"></span>X</span>
+                    </div>
+                    <div class="gauge-item">
+                        <div class="angle-gauge cyan">
+                            <svg viewBox="0 0 36 36">
+                                <circle class="track" cx="18" cy="18" r="15"/>
+                                <circle class="fill" cx="18" cy="18" r="15"
+                                    stroke-dasharray="94.25"
+                                    stroke-dashoffset="47.12"
+                                    id="accelYGauge"/>
+                            </svg>
+                            <span class="value" id="accelY">0.0</span>
+                        </div>
+                        <span class="gauge-label"><span class="axis-dot y"></span>Y</span>
+                    </div>
+                    <div class="gauge-item">
+                        <div class="angle-gauge cyan">
+                            <svg viewBox="0 0 36 36">
+                                <circle class="track" cx="18" cy="18" r="15"/>
+                                <circle class="fill" cx="18" cy="18" r="15"
+                                    stroke-dasharray="94.25"
+                                    stroke-dashoffset="47.12"
+                                    id="accelZGauge"/>
+                            </svg>
+                            <span class="value" id="accelZ">0.0</span>
+                        </div>
+                        <span class="gauge-label"><span class="axis-dot z"></span>Z</span>
+                    </div>
                 </div>
-                <div class="data-bar"><div class="data-bar-fill cyan" id="accelXBar" style="width: 50%"></div></div>
-
-                <div class="data-row">
-                    <span class="data-label"><span class="axis-dot y"></span>Y</span>
-                    <span class="data-value cyan" id="accelY">0.00</span>
-                </div>
-                <div class="data-bar"><div class="data-bar-fill cyan" id="accelYBar" style="width: 50%"></div></div>
-
-                <div class="data-row">
-                    <span class="data-label"><span class="axis-dot z"></span>Z</span>
-                    <span class="data-value cyan" id="accelZ">0.00</span>
-                </div>
-                <div class="data-bar"><div class="data-bar-fill cyan" id="accelZBar" style="width: 50%"></div></div>
             </div>
 
             <div class="data-card">
@@ -460,23 +552,47 @@
                         <div class="card-subtitle">Rotation (degrees)</div>
                     </div>
                 </div>
-                <div class="data-row">
-                    <span class="data-label"><span class="axis-dot x"></span>Alpha</span>
-                    <span class="data-value orange" id="gyroAlpha">0.00</span>
+                <div class="gauge-container">
+                    <div class="gauge-item">
+                        <div class="angle-gauge orange">
+                            <svg viewBox="0 0 36 36">
+                                <circle class="track" cx="18" cy="18" r="15"/>
+                                <circle class="fill" cx="18" cy="18" r="15"
+                                    stroke-dasharray="94.25"
+                                    stroke-dashoffset="47.12"
+                                    id="gyroAlphaGauge"/>
+                            </svg>
+                            <span class="value" id="gyroAlpha">0</span>
+                        </div>
+                        <span class="gauge-label"><span class="axis-dot x"></span>&alpha;</span>
+                    </div>
+                    <div class="gauge-item">
+                        <div class="angle-gauge orange">
+                            <svg viewBox="0 0 36 36">
+                                <circle class="track" cx="18" cy="18" r="15"/>
+                                <circle class="fill" cx="18" cy="18" r="15"
+                                    stroke-dasharray="94.25"
+                                    stroke-dashoffset="47.12"
+                                    id="gyroBetaGauge"/>
+                            </svg>
+                            <span class="value" id="gyroBeta">90</span>
+                        </div>
+                        <span class="gauge-label"><span class="axis-dot y"></span>&beta;</span>
+                    </div>
+                    <div class="gauge-item">
+                        <div class="angle-gauge orange">
+                            <svg viewBox="0 0 36 36">
+                                <circle class="track" cx="18" cy="18" r="15"/>
+                                <circle class="fill" cx="18" cy="18" r="15"
+                                    stroke-dasharray="94.25"
+                                    stroke-dashoffset="47.12"
+                                    id="gyroGammaGauge"/>
+                            </svg>
+                            <span class="value" id="gyroGamma">0</span>
+                        </div>
+                        <span class="gauge-label"><span class="axis-dot z"></span>&gamma;</span>
+                    </div>
                 </div>
-                <div class="data-bar"><div class="data-bar-fill orange" id="gyroAlphaBar" style="width: 0%"></div></div>
-
-                <div class="data-row">
-                    <span class="data-label"><span class="axis-dot y"></span>Beta</span>
-                    <span class="data-value orange" id="gyroBeta">0.00</span>
-                </div>
-                <div class="data-bar"><div class="data-bar-fill orange" id="gyroBetaBar" style="width: 50%"></div></div>
-
-                <div class="data-row">
-                    <span class="data-label"><span class="axis-dot z"></span>Gamma</span>
-                    <span class="data-value orange" id="gyroGamma">0.00</span>
-                </div>
-                <div class="data-bar"><div class="data-bar-fill orange" id="gyroGammaBar" style="width: 50%"></div></div>
             </div>
 
             <button class="connect-btn" id="connectBtn">Connect Sensors</button>
@@ -505,28 +621,31 @@
         const gyroBeta = document.getElementById('gyroBeta');
         const gyroGamma = document.getElementById('gyroGamma');
 
-        const accelXBar = document.getElementById('accelXBar');
-        const accelYBar = document.getElementById('accelYBar');
-        const accelZBar = document.getElementById('accelZBar');
-        const gyroAlphaBar = document.getElementById('gyroAlphaBar');
-        const gyroBetaBar = document.getElementById('gyroBetaBar');
-        const gyroGammaBar = document.getElementById('gyroGammaBar');
+        const accelXGauge = document.getElementById('accelXGauge');
+        const accelYGauge = document.getElementById('accelYGauge');
+        const accelZGauge = document.getElementById('accelZGauge');
+        const gyroAlphaGauge = document.getElementById('gyroAlphaGauge');
+        const gyroBetaGauge = document.getElementById('gyroBetaGauge');
+        const gyroGammaGauge = document.getElementById('gyroGammaGauge');
 
         let isConnected = false;
         let useFallback = true;
 
         // Current rotation values
         let currentAlpha = 0;
-        let currentBeta = 0;
+        let currentBeta = 90;
         let currentGamma = 0;
 
         // Target rotation for smooth interpolation
         let targetAlpha = 0;
-        let targetBeta = 90;  // Upright position (phone standing on table)
+        let targetBeta = 90;
         let targetGamma = 0;
 
-        function normalizeAngle(angle) {
-            return ((angle % 360) + 360) % 360;
+        function shortestAnglePath(current, target) {
+            let diff = target - current;
+            while (diff > 180) diff -= 360;
+            while (diff < -180) diff += 360;
+            return current + diff;
         }
 
         function lerp(current, target, factor) {
@@ -534,24 +653,15 @@
         }
 
         function updatePhoneRotation() {
-            currentAlpha = lerp(currentAlpha, targetAlpha, 0.12);
+            currentAlpha = shortestAnglePath(currentAlpha, targetAlpha);
             currentBeta = lerp(currentBeta, targetBeta, 0.12);
             currentGamma = lerp(currentGamma, targetGamma, 0.12);
 
-            // Convert device orientation to phone position on table
-            // Device beta = 90° means phone is vertical (upright)
-            // Device beta = 0° means phone is flat on table
-            // So we need to rotate based on device orientation
-            const flatBeta = 90 - currentBeta; // Phone's tilt from horizontal
-            const tiltGamma = currentGamma; // Phone's left/right tilt
-
-            // When phone is upright (portrait), it should stand on the table
-            // rotateX controls front/back tilt, rotateY controls left/right tilt
-            const rotateX = flatBeta;
-            const rotateY = tiltGamma;
+            const flatBeta = 90 - currentBeta;
+            const tiltGamma = currentGamma;
             const rotateZ = currentAlpha;
 
-            phoneContainer.style.transform = `rotateX(${rotateX}deg) rotateY(${rotateY}deg) rotateZ(${rotateZ}deg)`;
+            phoneContainer.style.transform = `rotateX(${flatBeta}deg) rotateY(${tiltGamma}deg) rotateZ(${rotateZ}deg)`;
 
             requestAnimationFrame(updatePhoneRotation);
         }
@@ -571,13 +681,13 @@
             targetBeta = event.beta || 0;
             targetGamma = event.gamma || 0;
 
-            gyroAlpha.textContent = formatValue(targetAlpha);
-            gyroBeta.textContent = formatValue(targetBeta);
-            gyroGamma.textContent = formatValue(targetGamma);
+            gyroAlpha.textContent = Math.round(targetAlpha);
+            gyroBeta.textContent = Math.round(targetBeta);
+            gyroGamma.textContent = Math.round(targetGamma);
 
-            updateBar(gyroAlphaBar, targetAlpha, 360);
-            updateBar(gyroBetaBar, targetBeta, 180);
-            updateBar(gyroGammaBar, targetGamma, 90);
+            updateGauge(gyroAlphaGauge, targetAlpha, 360);
+            updateGauge(gyroBetaGauge, targetBeta, 180);
+            updateGauge(gyroGammaGauge, targetGamma, 90);
         }
 
         function handleMotion(event) {
@@ -592,10 +702,17 @@
                 accelY.textContent = formatValue(y);
                 accelZ.textContent = formatValue(z);
 
-                updateBar(accelXBar, x, 20);
-                updateBar(accelYBar, y, 20);
-                updateBar(accelZBar, z, 20);
+                updateGauge(accelXGauge, x, 20);
+                updateGauge(accelYGauge, y, 20);
+                updateGauge(accelZGauge, z, 20);
             }
+        }
+
+        function updateGauge(gaugeElement, value, maxValue) {
+            const circumference = 94.25; // 2 * PI * 15
+            const percent = (Math.abs(value) % maxValue) / maxValue;
+            const offset = circumference * (1 - percent);
+            gaugeElement.style.strokeDashoffset = offset;
         }
 
         function handleMouseMove(event) {
